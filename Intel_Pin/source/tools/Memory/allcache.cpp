@@ -106,13 +106,21 @@ static UL3::CACHE ul3("L3 Unified Cache", UL3::cacheSize, UL3::lineSize, UL3::as
 
 static VOID Fini(int code, VOID* v)
 {
-    std::cerr << itlb;
-    std::cerr << dtlb;
-    std::cerr << il1;
-    std::cerr << dl1;
-    std::cerr << ul2;
-    std::cerr << ul3;
+    std::ofstream out("allcache.out");  // Output file
+
+    out << "PIN:MEMLATENCIES 1.0. 0x0\n";
+    out << "#\n# ALLCACHE stats\n#\n";
+
+    out << itlb;
+    out << dtlb;
+    out << il1;
+    out << dl1;
+    out << ul2;
+    out << ul3;
+
+    out.close();
 }
+
 
 static VOID Ul2Access(ADDRINT addr, UINT32 size, CACHE_BASE::ACCESS_TYPE accessType)
 {
