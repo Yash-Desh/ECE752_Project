@@ -58,7 +58,8 @@ const UINT32 max_sets                          = KILO; // cacheSize / (lineSize 
 const UINT32 max_associativity                 = 256;  // associativity;
 const CACHE_ALLOC::STORE_ALLOCATION allocation = CACHE_ALLOC::STORE_ALLOCATE;
 
-typedef CACHE_ROUND_ROBIN(max_sets, max_associativity, allocation) CACHE;
+// typedef CACHE_ROUND_ROBIN(max_sets, max_associativity, allocation) CACHE;
+typedef CACHE_LRU(max_sets, max_associativity, allocation) CACHE;
 } // namespace DL1
 
 DL1::CACHE* dl1 = NULL;

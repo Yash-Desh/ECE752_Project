@@ -98,6 +98,20 @@ class CACHE_TAG
     operator ADDRINT() const { return _tag; }
 };
 
+class CACHE_COUNTER
+{
+    private:
+    UINT64 _counter;
+
+  public:
+    CACHE_COUNTER(UINT64 counter = 0) { _counter = counter; }
+    bool operator==(const CACHE_COUNTER& right) const { return _counter == right._counter; }
+    bool operator--() const { return _counter-1; }
+    void decrement(){_counter -= 1;}
+    UINT64 get_count(){return _counter;}
+    operator UINT64() const { return _counter; }
+};
+
 /*!
  * Everything related to cache sets
  */
@@ -120,6 +134,8 @@ class DIRECT_MAPPED
     UINT32 Find(CACHE_TAG tag) { return (_tag == tag); }
     VOID Replace(CACHE_TAG tag) { _tag = tag; }
 };
+
+
 
 /*!
  *  @brief Cache set with round robin replacement
@@ -175,6 +191,120 @@ template< UINT32 MAX_ASSOCIATIVITY = 4 > class ROUND_ROBIN
         _tags[index] = tag;
         // condition typically faster than modulo
         _nextReplaceIndex = (index == 0 ? _tagsLastIndex : index - 1);
+    }
+};
+
+
+template < UINT32 MAX_ASSOCIATIVITY = 4 > class LEAST_RECENTLY_USED
+{
+    private:
+    CACHE_COUNTER _counters[MAX_ASSOCIATIVITY];
+    CACHE_TAG _tags[MAX_ASSOCIATIVITY];
+
+    UINT32 _tagsLastIndex; 
+    UINT32 _nextReplaceIndex;
+
+  public:
+    LEAST_RECENTLY_USED(UINT32 associativity = MAX_ASSOCIATIVITY) : _tagsLastIndex(associativity - 1)
+    {
+        ASSERTX(associativity <= MAX_ASSOCIATIVITY);
+        _nextReplaceIndex = _tagsLastIndex;
+
+        // variable for initializing the counters
+        ADDRINT counter_value = MAX_ASSOCIATIVITY-1;
+
+        for (INT32 index = _tagsLastIndex; index >= 0; index--)
+        {
+            _tags[index] = CACHE_TAG(0);
+
+            // initialize the counters |0|1|2|3|
+            _counters[index] = CACHE_COUNTER(counter_value--);
+        }
+    }
+
+    VOID SetAssociativity(UINT32 associativity)
+    {
+        ASSERTX(associativity <= MAX_ASSOCIATIVITY);
+        _tagsLastIndex    = associativity - 1;
+        _nextReplaceIndex = _tagsLastIndex;
+    }
+    UINT32 GetAssociativity(UINT32 associativity) { return _tagsLastIndex + 1; }
+
+    UINT32 Find(CACHE_TAG tag)
+    {
+        bool result = true;
+
+        for (UINT32 index = _tagsLastIndex; index >= 0; index--)
+        {
+            // this is an ugly micro-optimization, but it does cause a
+            // tighter assembly loop for ARM that way ...
+            if (_tags[index] == tag) 
+            {
+
+                // decrement the value of the other counters 
+                // if(_counters[index] != MAX_ASSOCIATIVITY-1)
+                // {
+                    for(UINT32 index2 = _tagsLastIndex; index2 >= 0; index2--)
+                    {
+                        if(index2 != index && _counters[index2] > 0 && _counters[index2] > _counters[index])
+                        {
+                            _counters[index2].decrement();
+                        }
+                    }
+                // }
+
+                // maximize the counter of found index
+                _counters[index] = MAX_ASSOCIATIVITY-1;
+                
+                goto end;
+            }
+        }
+        result = false;
+
+    end:
+        return result;
+    }
+
+    VOID Replace(CACHE_TAG tag)
+    {
+        // Index to be replaced
+        //const UINT32 index = _nextReplaceIndex;
+
+        // determine the counter with the min count value
+
+        // UINT32 min_counter = MAX_ASSOCIATIVITY;
+        for(UINT32 index = _tagsLastIndex; index >= 0; index--)
+        {
+            if(_counters[index].get_count() ==  0)
+            {
+                _nextReplaceIndex = index;
+                // min_counter = _counters[index];
+                break;
+            }
+        }
+
+        // decrement the value of the other counters 
+        for(UINT32 index = _tagsLastIndex; index >= 0; index--)
+        {
+            if(index != _nextReplaceIndex && _counters[index] > 0)
+            {
+                _counters[index].decrement();
+            }
+        }
+
+        _tags[_nextReplaceIndex] = tag;
+        _counters[_nextReplaceIndex] = MAX_ASSOCIATIVITY-1;
+
+        // condition typically faster than modulo
+        // _nextReplaceIndex = (index == 0 ? _tagsLastIndex : index - 1);
+    }
+    VOID Flush()
+    {
+        for (INT32 index = _tagsLastIndex; index >= 0; index--)
+        {
+            _tags[index] = 0;
+        }
+        _nextReplaceIndex = _tagsLastIndex;
     }
 };
 
@@ -432,5 +562,8 @@ bool CACHE< SET, MAX_SETS, STORE_ALLOCATION >::AccessSingleLine(ADDRINT addr, AC
 #define CACHE_DIRECT_MAPPED(MAX_SETS, ALLOCATION) CACHE< CACHE_SET::DIRECT_MAPPED, MAX_SETS, ALLOCATION >
 #define CACHE_ROUND_ROBIN(MAX_SETS, MAX_ASSOCIATIVITY, ALLOCATION) \
     CACHE< CACHE_SET::ROUND_ROBIN< MAX_ASSOCIATIVITY >, MAX_SETS, ALLOCATION >
+#define CACHE_LRU(MAX_SETS, MAX_ASSOCIATIVITY, ALLOCATION) \
+    CACHE< CACHE_SET::LEAST_RECENTLY_USED< MAX_ASSOCIATIVITY >, MAX_SETS, ALLOCATION >
+
 
 #endif // PIN_CACHE_H

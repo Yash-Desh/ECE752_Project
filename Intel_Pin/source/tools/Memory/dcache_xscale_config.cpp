@@ -16,6 +16,9 @@ typedef UINT64 CACHE_STATS; // type of cache hit/miss counters
 
 #include "pin_cache.H"
 
+// #define CACHE_LRU(MAX_SETS, MAX_ASSOCIATIVITY, ALLOCATION) CACHE< CACHE_SET::LEAST_RECENTLY_USED< MAX_ASSOCIATIVITY >, MAX_SETS, ALLOCATION >
+
+
 KNOB< UINT32 > KnobCacheSize(KNOB_MODE_WRITEONCE, "pintool", "-s1", "32768", "l1 cache size in bytes");
 
 KNOB< UINT32 > KnobCacheAssociativity(KNOB_MODE_WRITEONCE, "pintool", "-a1", "32", "l1 cache associativity");
@@ -30,7 +33,8 @@ const UINT32 max_sets = 128;
 
 const UINT32 max_associativity = 32;
 
-typedef CACHE_ROUND_ROBIN(max_sets, max_associativity, allocation) CACHE;
+// typedef CACHE_ROUND_ROBIN(max_sets, max_associativity, allocation) CACHE;
+typedef CACHE_LRU(max_sets, max_associativity, allocation) CACHE;
 } // namespace DL1
 
 static DL1::CACHE* dl1;

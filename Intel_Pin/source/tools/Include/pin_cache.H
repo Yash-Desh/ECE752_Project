@@ -10,9 +10,27 @@
 #ifndef PIN_CACHE_H
 #define PIN_CACHE_H
 
-#include <string>
+#define KILO 1024
+#define MEGA (KILO * KILO)
+#define GIGA (KILO * MEGA)
 
-#include "pin_util.H"
+typedef UINT64 CACHE_STATS; // type of cache hit/miss counters
+
+#include <sstream>
+using std::ostringstream;
+using std::string;
+/*! RMR (rodric@gmail.com) 
+ *   - temporary work around because decstr()
+ *     casts 64 bit ints to 32 bit ones
+ */
+static string mydecstr(UINT64 v, UINT32 w)
+{
+    ostringstream o;
+    o.width(w);
+    o << v;
+    string str(o.str());
+    return str;
+}
 
 /*!
  *  @brief Checks if n is a power of 2.
@@ -80,6 +98,20 @@ class CACHE_TAG
     operator ADDRINT() const { return _tag; }
 };
 
+class CACHE_COUNTER
+{
+    private:
+    UINT64 _counter;
+
+  public:
+    CACHE_COUNTER(UINT64 counter = 0) { _counter = counter; }
+    bool operator==(const CACHE_COUNTER& right) const { return _counter == right._counter; }
+    bool operator--() const { return _counter-1; }
+    void decrement(){_counter -= 1;}
+    UINT64 get_count(){return _counter;}
+    operator UINT64() const { return _counter; }
+};
+
 /*!
  * Everything related to cache sets
  */
@@ -101,8 +133,9 @@ class DIRECT_MAPPED
 
     UINT32 Find(CACHE_TAG tag) { return (_tag == tag); }
     VOID Replace(CACHE_TAG tag) { _tag = tag; }
-    VOID Flush() { _tag = 0; }
 };
+
+
 
 /*!
  *  @brief Cache set with round robin replacement
@@ -159,6 +192,112 @@ template< UINT32 MAX_ASSOCIATIVITY = 4 > class ROUND_ROBIN
         // condition typically faster than modulo
         _nextReplaceIndex = (index == 0 ? _tagsLastIndex : index - 1);
     }
+};
+
+
+template < UINT32 MAX_ASSOCIATIVITY = 4 > class LEAST_RECENTLY_USED
+{
+    private:
+    CACHE_COUNTER _counters[MAX_ASSOCIATIVITY];
+    CACHE_TAG _tags[MAX_ASSOCIATIVITY];
+
+    UINT32 _tagsLastIndex; 
+    UINT32 _nextReplaceIndex;
+
+  public:
+    LEAST_RECENTLY_USED(UINT32 associativity = MAX_ASSOCIATIVITY) : _tagsLastIndex(associativity - 1)
+    {
+        ASSERTX(associativity <= MAX_ASSOCIATIVITY);
+        _nextReplaceIndex = _tagsLastIndex;
+
+        // variable for initializing the counters
+        ADDRINT counter_value = MAX_ASSOCIATIVITY-1;
+
+        for (INT32 index = _tagsLastIndex; index >= 0; index--)
+        {
+            _tags[index] = CACHE_TAG(0);
+
+            // initialize the counters |0|1|2|3|
+            _counters[index] = CACHE_COUNTER(counter_value--);
+        }
+    }
+
+    VOID SetAssociativity(UINT32 associativity)
+    {
+        ASSERTX(associativity <= MAX_ASSOCIATIVITY);
+        _tagsLastIndex    = associativity - 1;
+        _nextReplaceIndex = _tagsLastIndex;
+    }
+    UINT32 GetAssociativity(UINT32 associativity) { return _tagsLastIndex + 1; }
+
+    UINT32 Find(CACHE_TAG tag)
+    {
+        bool result = true;
+
+        for (UINT32 index = _tagsLastIndex; index >= 0; index--)
+        {
+            // this is an ugly micro-optimization, but it does cause a
+            // tighter assembly loop for ARM that way ...
+            if (_tags[index] == tag) 
+            {
+
+                // decrement the value of the other counters 
+                // if(_counters[index] != MAX_ASSOCIATIVITY-1)
+                // {
+                    for(UINT32 index2 = _tagsLastIndex; index2 >= 0; index2--)
+                    {
+                        if(index2 != index && _counters[index2] > 0 && _counters[index2] > _counters[index])
+                        {
+                            _counters[index2].decrement();
+                        }
+                    }
+                // }
+
+                // maximize the counter of found index
+                _counters[index] = MAX_ASSOCIATIVITY-1;
+                
+                goto end;
+            }
+        }
+        result = false;
+
+    end:
+        return result;
+    }
+
+    VOID Replace(CACHE_TAG tag)
+    {
+        // Index to be replaced
+        //const UINT32 index = _nextReplaceIndex;
+
+        // determine the counter with the min count value
+
+        // UINT32 min_counter = MAX_ASSOCIATIVITY;
+        for(UINT32 index = _tagsLastIndex; index >= 0; index--)
+        {
+            if(_counters[index].get_count() ==  0)
+            {
+                _nextReplaceIndex = index;
+                // min_counter = _counters[index];
+                break;
+            }
+        }
+
+        // decrement the value of the other counters 
+        for(UINT32 index = _tagsLastIndex; index >= 0; index--)
+        {
+            if(index != _nextReplaceIndex && _counters[index] > 0)
+            {
+                _counters[index].decrement();
+            }
+        }
+
+        _tags[_nextReplaceIndex] = tag;
+        _counters[_nextReplaceIndex] = MAX_ASSOCIATIVITY-1;
+
+        // condition typically faster than modulo
+        // _nextReplaceIndex = (index == 0 ? _tagsLastIndex : index - 1);
+    }
     VOID Flush()
     {
         for (INT32 index = _tagsLastIndex; index >= 0; index--)
@@ -194,18 +333,22 @@ class CACHE_BASE
         ACCESS_TYPE_NUM
     } ACCESS_TYPE;
 
+    typedef enum
+    {
+        CACHE_TYPE_ICACHE,
+        CACHE_TYPE_DCACHE,
+        CACHE_TYPE_NUM
+    } CACHE_TYPE;
+
   protected:
     static const UINT32 HIT_MISS_NUM = 2;
     CACHE_STATS _access[ACCESS_TYPE_NUM][HIT_MISS_NUM];
 
-  private:
-    // input params
+  private: // input params
     const std::string _name;
     const UINT32 _cacheSize;
     const UINT32 _lineSize;
     const UINT32 _associativity;
-    UINT32 _numberOfFlushes;
-    UINT32 _numberOfResets;
 
     // computed params
     const UINT32 _lineShift;
@@ -242,9 +385,6 @@ class CACHE_BASE
     CACHE_STATS Misses() const { return SumAccess(false); }
     CACHE_STATS Accesses() const { return Hits() + Misses(); }
 
-    CACHE_STATS Flushes() const { return _numberOfFlushes; }
-    CACHE_STATS Resets() const { return _numberOfResets; }
-
     VOID SplitAddress(const ADDRINT addr, CACHE_TAG& tag, UINT32& setIndex) const
     {
         tag      = addr >> _lineShift;
@@ -258,11 +398,7 @@ class CACHE_BASE
         SplitAddress(addr, tag, setIndex);
     }
 
-    VOID IncFlushCounter() { _numberOfFlushes += 1; }
-
-    VOID IncResetCounter() { _numberOfResets += 1; }
-
-    std::ostream& StatsLong(std::ostream& out) const;
+    string StatsLong(string prefix = "", CACHE_TYPE = CACHE_TYPE_DCACHE) const;
 };
 
 CACHE_BASE::CACHE_BASE(std::string name, UINT32 cacheSize, UINT32 lineSize, UINT32 associativity)
@@ -282,43 +418,49 @@ CACHE_BASE::CACHE_BASE(std::string name, UINT32 cacheSize, UINT32 lineSize, UINT
 /*!
  *  @brief Stats output method
  */
-std::ostream& CACHE_BASE::StatsLong(std::ostream& out) const
+
+string CACHE_BASE::StatsLong(string prefix, CACHE_TYPE cache_type) const
 {
     const UINT32 headerWidth = 19;
-    const UINT32 numberWidth = 10;
+    const UINT32 numberWidth = 12;
 
-    out << _name << ":" << std::endl;
+    string out;
 
-    for (UINT32 i = 0; i < ACCESS_TYPE_NUM; i++)
+    out += prefix + _name + ":" + "\n";
+
+    if (cache_type != CACHE_TYPE_ICACHE)
     {
-        const ACCESS_TYPE accessType = ACCESS_TYPE(i);
+        for (UINT32 i = 0; i < ACCESS_TYPE_NUM; i++)
+        {
+            const ACCESS_TYPE accessType = ACCESS_TYPE(i);
 
-        std::string type(accessType == ACCESS_TYPE_LOAD ? "Load" : "Store");
+            std::string type(accessType == ACCESS_TYPE_LOAD ? "Load" : "Store");
 
-        out << StringString(type + " Hits:      ", headerWidth) << StringInt(Hits(accessType), numberWidth) << std::endl;
-        out << StringString(type + " Misses:    ", headerWidth) << StringInt(Misses(accessType), numberWidth) << std::endl;
-        out << StringString(type + " Accesses:  ", headerWidth) << StringInt(Accesses(accessType), numberWidth) << std::endl;
-        out << StringString(type + " Miss Rate: ", headerWidth)
-            << StringFlt(100.0 * Misses(accessType) / Accesses(accessType), 2, numberWidth - 1) << "%" << std::endl;
-        out << std::endl;
+            out += prefix + ljstr(type + "-Hits:      ", headerWidth) + mydecstr(Hits(accessType), numberWidth) + "  " +
+                   fltstr(100.0 * Hits(accessType) / Accesses(accessType), 2, 6) + "%\n";
+
+            out += prefix + ljstr(type + "-Misses:    ", headerWidth) + mydecstr(Misses(accessType), numberWidth) + "  " +
+                   fltstr(100.0 * Misses(accessType) / Accesses(accessType), 2, 6) + "%\n";
+
+            out += prefix + ljstr(type + "-Accesses:  ", headerWidth) + mydecstr(Accesses(accessType), numberWidth) + "  " +
+                   fltstr(100.0 * Accesses(accessType) / Accesses(accessType), 2, 6) + "%\n";
+
+            out += prefix + "\n";
+        }
     }
 
-    out << StringString("Total Hits:      ", headerWidth, ' ') << StringInt(Hits(), numberWidth) << std::endl;
-    out << StringString("Total Misses:    ", headerWidth, ' ') << StringInt(Misses(), numberWidth) << std::endl;
-    out << StringString("Total Accesses:  ", headerWidth, ' ') << StringInt(Accesses(), numberWidth) << std::endl;
-    out << StringString("Total Miss Rate: ", headerWidth, ' ') << StringFlt(100.0 * Misses() / Accesses(), 2, numberWidth - 1)
-        << "%" << std::endl;
+    out += prefix + ljstr("Total-Hits:      ", headerWidth) + mydecstr(Hits(), numberWidth) + "  " +
+           fltstr(100.0 * Hits() / Accesses(), 2, 6) + "%\n";
 
-    out << StringString("Flushes:         ", headerWidth, ' ') << StringInt(Flushes(), numberWidth) << std::endl;
-    out << StringString("Stat Resets:     ", headerWidth, ' ') << StringInt(Resets(), numberWidth) << std::endl;
+    out += prefix + ljstr("Total-Misses:    ", headerWidth) + mydecstr(Misses(), numberWidth) + "  " +
+           fltstr(100.0 * Misses() / Accesses(), 2, 6) + "%\n";
 
-    out << std::endl;
+    out += prefix + ljstr("Total-Accesses:  ", headerWidth) + mydecstr(Accesses(), numberWidth) + "  " +
+           fltstr(100.0 * Accesses() / Accesses(), 2, 6) + "%\n";
+    out += "\n";
 
     return out;
 }
-
-/// ostream operator for CACHE_BASE
-std::ostream& operator<<(std::ostream& out, const CACHE_BASE& cacheBase) { return cacheBase.StatsLong(out); }
 
 /*!
  *  @brief Templated cache class with specific cache set allocation policies
@@ -349,8 +491,6 @@ template< class SET, UINT32 MAX_SETS, UINT32 STORE_ALLOCATION > class CACHE : pu
     bool Access(ADDRINT addr, UINT32 size, ACCESS_TYPE accessType);
     /// Cache access at addr that does not span cache lines
     bool AccessSingleLine(ADDRINT addr, ACCESS_TYPE accessType);
-    void Flush();
-    void ResetStats();
 };
 
 /*!
@@ -417,32 +557,13 @@ bool CACHE< SET, MAX_SETS, STORE_ALLOCATION >::AccessSingleLine(ADDRINT addr, AC
 
     return hit;
 }
-/*!
- *  @return true if accessed cache line hits
- */
-template< class SET, UINT32 MAX_SETS, UINT32 STORE_ALLOCATION > void CACHE< SET, MAX_SETS, STORE_ALLOCATION >::Flush()
-{
-    for (INT32 index = NumSets(); index >= 0; index--)
-    {
-        SET& set = _sets[index];
-        set.Flush();
-    }
-    IncFlushCounter();
-}
-
-template< class SET, UINT32 MAX_SETS, UINT32 STORE_ALLOCATION > void CACHE< SET, MAX_SETS, STORE_ALLOCATION >::ResetStats()
-{
-    for (UINT32 accessType = 0; accessType < ACCESS_TYPE_NUM; accessType++)
-    {
-        _access[accessType][false] = 0;
-        _access[accessType][true]  = 0;
-    }
-    IncResetCounter();
-}
 
 // define shortcuts
 #define CACHE_DIRECT_MAPPED(MAX_SETS, ALLOCATION) CACHE< CACHE_SET::DIRECT_MAPPED, MAX_SETS, ALLOCATION >
 #define CACHE_ROUND_ROBIN(MAX_SETS, MAX_ASSOCIATIVITY, ALLOCATION) \
     CACHE< CACHE_SET::ROUND_ROBIN< MAX_ASSOCIATIVITY >, MAX_SETS, ALLOCATION >
+#define CACHE_LRU(MAX_SETS, MAX_ASSOCIATIVITY, ALLOCATION) \
+    CACHE< CACHE_SET::LEAST_RECENTLY_USED< MAX_ASSOCIATIVITY >, MAX_SETS, ALLOCATION >
+
 
 #endif // PIN_CACHE_H
