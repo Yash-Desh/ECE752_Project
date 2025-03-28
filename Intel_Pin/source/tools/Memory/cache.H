@@ -212,13 +212,13 @@ template < UINT32 MAX_ASSOCIATIVITY = 4 > class LEAST_RECENTLY_USED
 
         // variable for initializing the counters
         ADDRINT counter_value = MAX_ASSOCIATIVITY-1;
-
+        // std::cout << "Hello 1";
         for (INT32 index = _tagsLastIndex; index >= 0; index--)
         {
             _tags[index] = CACHE_TAG(0);
-
             // initialize the counters |0|1|2|3|
             _counters[index] = CACHE_COUNTER(counter_value--);
+            
         }
     }
 
@@ -233,32 +233,40 @@ template < UINT32 MAX_ASSOCIATIVITY = 4 > class LEAST_RECENTLY_USED
     UINT32 Find(CACHE_TAG tag)
     {
         bool result = true;
+        // std::cout<<"Inside the find function\n";
 
-        for (UINT32 index = _tagsLastIndex; index >= 0; index--)
+        for (UINT32 index = _tagsLastIndex; index >= 0 && index <= (_tagsLastIndex); index--)
         {
             // this is an ugly micro-optimization, but it does cause a
             // tighter assembly loop for ARM that way ...
-            if (_tags[index] == tag) 
+            // std::cout<<"Inside for loop before if "<<index<<"\n";
+            if(index >= 0)
             {
 
-                // decrement the value of the other counters 
-                // if(_counters[index] != MAX_ASSOCIATIVITY-1)
-                // {
-                    for(UINT32 index2 = _tagsLastIndex; index2 >= 0; index2--)
-                    {
-                        if(index2 != index && _counters[index2] > 0 && _counters[index2] > _counters[index])
+                if (_tags[index] == tag) 
+                {
+                    // std::cout<<"Inside for loop after if\n";
+                    // decrement the value of the other counters 
+                    // if(_counters[index] != MAX_ASSOCIATIVITY-1)
+                    // {
+                        for(UINT32 index2 = _tagsLastIndex; index2 >= 0 && index2 <= (_tagsLastIndex); index2--)
                         {
-                            _counters[index2].decrement();
+                            if(index2 != index && _counters[index2].get_count() > 0 && _counters[index2].get_count() > _counters[index].get_count())
+                            {
+                                _counters[index2].decrement();
+                                // std::cout << "Hello 2";
+                            }
                         }
-                    }
-                // }
+                    // }
 
-                // maximize the counter of found index
-                _counters[index] = MAX_ASSOCIATIVITY-1;
-                
-                goto end;
+                    // maximize the counter of found index
+                    _counters[index] = MAX_ASSOCIATIVITY-1;
+                    
+                    goto end;
+                }
             }
         }
+        // std::cout<<"After the for loop\n";
         result = false;
 
     end:
@@ -273,22 +281,24 @@ template < UINT32 MAX_ASSOCIATIVITY = 4 > class LEAST_RECENTLY_USED
         // determine the counter with the min count value
 
         // UINT32 min_counter = MAX_ASSOCIATIVITY;
-        for(UINT32 index = _tagsLastIndex; index >= 0; index--)
+        for(UINT32 index = _tagsLastIndex; index >= 0 && index <= (_tagsLastIndex); index--)
         {
             if(_counters[index].get_count() ==  0)
             {
                 _nextReplaceIndex = index;
                 // min_counter = _counters[index];
+                // std::cout << "Hello 3";
                 break;
             }
         }
 
         // decrement the value of the other counters 
-        for(UINT32 index = _tagsLastIndex; index >= 0; index--)
+        for(UINT32 index = _tagsLastIndex; index >= 0 && index <= (_tagsLastIndex); index--)
         {
             if(index != _nextReplaceIndex && _counters[index] > 0)
             {
                 _counters[index].decrement();
+                // std::cout << "Hello 4";
             }
         }
 
@@ -303,6 +313,7 @@ template < UINT32 MAX_ASSOCIATIVITY = 4 > class LEAST_RECENTLY_USED
         for (INT32 index = _tagsLastIndex; index >= 0; index--)
         {
             _tags[index] = 0;
+            // std::cout << "Hello 5";
         }
         _nextReplaceIndex = _tagsLastIndex;
     }
@@ -500,6 +511,7 @@ template< class SET, UINT32 MAX_SETS, UINT32 STORE_ALLOCATION > class CACHE : pu
 template< class SET, UINT32 MAX_SETS, UINT32 STORE_ALLOCATION >
 bool CACHE< SET, MAX_SETS, STORE_ALLOCATION >::Access(ADDRINT addr, UINT32 size, ACCESS_TYPE accessType)
 {
+    // std::cout<<"Hello from Access \n";
     const ADDRINT highAddr = addr + size;
     bool allHit            = true;
 
@@ -538,6 +550,7 @@ bool CACHE< SET, MAX_SETS, STORE_ALLOCATION >::Access(ADDRINT addr, UINT32 size,
 template< class SET, UINT32 MAX_SETS, UINT32 STORE_ALLOCATION >
 bool CACHE< SET, MAX_SETS, STORE_ALLOCATION >::AccessSingleLine(ADDRINT addr, ACCESS_TYPE accessType)
 {
+    // std::cout<<"Hello from Single Access \n";
     CACHE_TAG tag;
     UINT32 setIndex;
 
@@ -562,7 +575,7 @@ bool CACHE< SET, MAX_SETS, STORE_ALLOCATION >::AccessSingleLine(ADDRINT addr, AC
 #define CACHE_DIRECT_MAPPED(MAX_SETS, ALLOCATION) CACHE< CACHE_SET::DIRECT_MAPPED, MAX_SETS, ALLOCATION >
 #define CACHE_ROUND_ROBIN(MAX_SETS, MAX_ASSOCIATIVITY, ALLOCATION) \
     CACHE< CACHE_SET::ROUND_ROBIN< MAX_ASSOCIATIVITY >, MAX_SETS, ALLOCATION >
-#define CACHE_LRU(MAX_SETS, MAX_ASSOCIATIVITY, ALLOCATION) \
+#define CACHE_LEAST_RECENTLY_USED(MAX_SETS, MAX_ASSOCIATIVITY, ALLOCATION) \
     CACHE< CACHE_SET::LEAST_RECENTLY_USED< MAX_ASSOCIATIVITY >, MAX_SETS, ALLOCATION >
 
 

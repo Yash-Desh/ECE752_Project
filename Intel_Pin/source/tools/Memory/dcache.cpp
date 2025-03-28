@@ -59,7 +59,7 @@ const UINT32 max_associativity                 = 256;  // associativity;
 const CACHE_ALLOC::STORE_ALLOCATION allocation = CACHE_ALLOC::STORE_ALLOCATE;
 
 // typedef CACHE_ROUND_ROBIN(max_sets, max_associativity, allocation) CACHE;
-typedef CACHE_LRU(max_sets, max_associativity, allocation) CACHE;
+typedef CACHE_LEAST_RECENTLY_USED(max_sets, max_associativity, allocation) CACHE;
 } // namespace DL1
 
 DL1::CACHE* dl1 = NULL;
@@ -273,6 +273,7 @@ int main(int argc, char* argv[])
 
     INS_AddInstrumentFunction(Instruction, 0);
     PIN_AddFiniFunction(Fini, 0);
+    //PIN_AddInternalExceptionHandler();
 
     // Never returns
 
