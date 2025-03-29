@@ -23,7 +23,7 @@ using std::endl;
 /* Commandline Switches  -- this provides the DEFAULT values */
 /* ===================================================================== */
 
-KNOB< string > KnobOutputFile(KNOB_MODE_WRITEONCE, "pintool", "o", "dcache.out", "specify dcache file name");
+KNOB< string > KnobOutputFile(KNOB_MODE_WRITEONCE, "pintool", "o", "dcache_with_L2_LRU.out", "specify dcache file name");
 KNOB< BOOL > KnobTrackLoads(KNOB_MODE_WRITEONCE, "pintool", "tl", "0", "track individual loads -- increases profiling time");
 KNOB< BOOL > KnobTrackStores(KNOB_MODE_WRITEONCE, "pintool", "ts", "0", "track individual stores -- increases profiling time");
 KNOB< UINT32 > KnobThresholdHit(KNOB_MODE_WRITEONCE, "pintool", "rh", "100", "only report memops with hit count above threshold");
@@ -193,16 +193,17 @@ VOID StoreMultiFast(ADDRINT addr, UINT32 size) {
 /* ===================================================================== */
 
 VOID LoadSingleFast(ADDRINT addr) { 
-    if (!dl1->AccessSingleLine(addr, size, CACHE_BASE::ACCESS_TYPE_LOAD)) {
-        l2->AccessSingleLine(addr, size, CACHE_BASE::ACCESS_TYPE_LOAD);
+    if (!dl1->AccessSingleLine(addr, CACHE_BASE::ACCESS_TYPE_LOAD)) {
+        l2->AccessSingleLine(addr, CACHE_BASE::ACCESS_TYPE_LOAD);
     } 
 }
+
 
 /* ===================================================================== */
 
 VOID StoreSingleFast(ADDRINT addr) { 
-    if (!dl1->AccessSingleLine(addr, size, CACHE_BASE::ACCESS_TYPE_STORE)) {
-        l2->AccessSingleLine(addr, size, CACHE_BASE::ACCESS_TYPE_STORE);
+    if (!dl1->AccessSingleLine(addr, CACHE_BASE::ACCESS_TYPE_STORE)) {
+        l2->AccessSingleLine(addr, CACHE_BASE::ACCESS_TYPE_STORE);
     } 
 }
 
@@ -298,10 +299,8 @@ VOID Fini(int code, VOID* v)
     // print D-cache profile
     // @todo what does this print
 
-    out << "PIN:MEMLATENCIES 1.0. 0x0\n";
-
     out << "#\n"
-           "# DCACHE stats\n"
+           "# DCACHE stats with L2 and LRU replacement:\n"
            "#\n";
 
     out << dl1->StatsLong("# ", CACHE_BASE::CACHE_TYPE_DCACHE);
