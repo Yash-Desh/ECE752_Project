@@ -248,7 +248,7 @@ template < UINT32 MAX_ASSOCIATIVITY = 4 > class LEAST_RECENTLY_USED
 
                 if (_tags[index] == tag) 
                 {
-                    // std::cout<<"Inside for loop after if\n";
+                    // std::cout<<"hit on index "<<index<<"\n";
                     // decrement the value of the other counters 
                     // if(_counters[index] != MAX_ASSOCIATIVITY-1)
                     // {
@@ -263,7 +263,7 @@ template < UINT32 MAX_ASSOCIATIVITY = 4 > class LEAST_RECENTLY_USED
                     // }
 
                     // maximize the counter of found index
-                    _counters[index] = CACHE_COUNTER(MAX_ASSOCIATIVITY-1);
+                    _counters[index] = CACHE_COUNTER(_tagsLastIndex);
                     
                     goto end;
                 }
@@ -306,9 +306,9 @@ template < UINT32 MAX_ASSOCIATIVITY = 4 > class LEAST_RECENTLY_USED
         }
 
         _tags[_nextReplaceIndex] = tag;
-        _counters[_nextReplaceIndex] = CACHE_COUNTER(MAX_ASSOCIATIVITY-1);
+        _counters[_nextReplaceIndex] = CACHE_COUNTER(_tagsLastIndex);
+        // std::cout<<_nextReplaceIndex<<" "<<_counters[_nextReplaceIndex].get_count()<<"\n";
         std::cout<<_nextReplaceIndex<<" ";
-
         // condition typically faster than modulo
         // _nextReplaceIndex = (index == 0 ? _tagsLastIndex : index - 1);
     }
@@ -516,7 +516,7 @@ template< class SET, UINT32 MAX_SETS, UINT32 STORE_ALLOCATION > class CACHE : pu
 template< class SET, UINT32 MAX_SETS, UINT32 STORE_ALLOCATION >
 bool CACHE< SET, MAX_SETS, STORE_ALLOCATION >::Access(ADDRINT addr, UINT32 size, ACCESS_TYPE accessType)
 {
-    // std::cout<<"Hello from Access \n";
+    // std::cout<<"Access Function called \n";
     const ADDRINT highAddr = addr + size;
     bool allHit            = true;
 
@@ -533,10 +533,13 @@ bool CACHE< SET, MAX_SETS, STORE_ALLOCATION >::Access(ADDRINT addr, UINT32 size,
 
         bool localHit = set.Find(tag);
         allHit &= localHit;
+        // std::cout<<"Find called for set "<<setIndex<<"\n";
+
 
         // on miss, loads always allocate, stores optionally
         if ((!localHit) && (accessType == ACCESS_TYPE_LOAD || STORE_ALLOCATION == CACHE_ALLOC::STORE_ALLOCATE))
         {
+            // std::cout<<"Replace called for set "<<setIndex<<"\n";
             set.Replace(tag);
         }
 
@@ -555,19 +558,21 @@ bool CACHE< SET, MAX_SETS, STORE_ALLOCATION >::Access(ADDRINT addr, UINT32 size,
 template< class SET, UINT32 MAX_SETS, UINT32 STORE_ALLOCATION >
 bool CACHE< SET, MAX_SETS, STORE_ALLOCATION >::AccessSingleLine(ADDRINT addr, ACCESS_TYPE accessType)
 {
-    // std::cout<<"Hello from Single Access \n";
+    // std::cout<<"AccessSingleLine Function called \n";
     CACHE_TAG tag;
     UINT32 setIndex;
 
     SplitAddress(addr, tag, setIndex);
 
     SET& set = _sets[setIndex];
+    // std::cout<<"Find called for set "<<setIndex<<"\n";
 
     bool hit = set.Find(tag);
 
     // on miss, loads always allocate, stores optionally
     if ((!hit) && (accessType == ACCESS_TYPE_LOAD || STORE_ALLOCATION == CACHE_ALLOC::STORE_ALLOCATE))
     {
+        // std::cout<<"Replace called for set "<<setIndex<<"\n";
         set.Replace(tag);
     }
 
