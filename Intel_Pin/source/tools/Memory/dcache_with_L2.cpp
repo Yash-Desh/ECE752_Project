@@ -20,10 +20,10 @@ using std::cerr;
 using std::endl;
 
 /* ===================================================================== */
-/* Commandline Switches */
+/* Commandline Switches  -- this provides the DEFAULT values */
 /* ===================================================================== */
 
-KNOB< string > KnobOutputFile(KNOB_MODE_WRITEONCE, "pintool", "o", "dcache.out", "specify dcache file name");
+KNOB< string > KnobOutputFile(KNOB_MODE_WRITEONCE, "pintool", "o", "dcache_with_L2_LRU.out", "specify dcache file name");
 KNOB< BOOL > KnobTrackLoads(KNOB_MODE_WRITEONCE, "pintool", "tl", "0", "track individual loads -- increases profiling time");
 KNOB< BOOL > KnobTrackStores(KNOB_MODE_WRITEONCE, "pintool", "ts", "0", "track individual stores -- increases profiling time");
 KNOB< UINT32 > KnobThresholdHit(KNOB_MODE_WRITEONCE, "pintool", "rh", "100", "only report memops with hit count above threshold");
@@ -60,9 +60,28 @@ const CACHE_ALLOC::STORE_ALLOCATION allocation = CACHE_ALLOC::STORE_ALLOCATE;
 
 // typedef CACHE_ROUND_ROBIN(max_sets, max_associativity, allocation) CACHE;
 typedef CACHE_LEAST_RECENTLY_USED(max_sets, max_associativity, allocation) CACHE;
-} // namespace DL1
+} // namespace DL1} // namespace DL1
 
 DL1::CACHE* dl1 = NULL;
+
+
+
+// L2 Cache
+namespace L2
+{
+    const UINT32 max_sets = 4 * KILO; // L2 is larger than L1
+    const UINT32 max_associativity = 16; // Higher associativity
+    const CACHE_ALLOC::STORE_ALLOCATION allocation = CACHE_ALLOC::STORE_ALLOCATE;
+
+    typedef CACHE_LEAST_RECENTLY_USED(max_sets, max_associativity, allocation) CACHE;
+}
+
+L2::CACHE* l2 = NULL;    // L2 cache instance
+
+
+
+
+
 
 typedef enum
 {
@@ -81,23 +100,43 @@ COMPRESSOR_COUNTER< ADDRINT, UINT32, COUNTER_HIT_MISS > profile;
 
 VOID LoadMulti(ADDRINT addr, UINT32 size, UINT32 instId)
 {
-    // first level D-cache
+    // Check L1 first
     const BOOL dl1Hit = dl1->Access(addr, size, CACHE_BASE::ACCESS_TYPE_LOAD);
+    
+    cerr<<"LOAD MULTI \n";
 
-    const COUNTER counter = dl1Hit ? COUNTER_HIT : COUNTER_MISS;
-    profile[instId][counter]++;
+    if (!dl1Hit) {
+        
+        // If L1 misses, check L2
+        const BOOL l2Hit = l2->Access(addr, size, CACHE_BASE::ACCESS_TYPE_LOAD);
+
+        const COUNTER counter = l2Hit ? COUNTER_HIT : COUNTER_MISS;
+        profile[instId][counter]++;
+    } else {
+        profile[instId][COUNTER_HIT]++;
+    }
 }
+
+
+
+
 
 /* ===================================================================== */
 
 VOID StoreMulti(ADDRINT addr, UINT32 size, UINT32 instId)
 {
-    // first level D-cache
     const BOOL dl1Hit = dl1->Access(addr, size, CACHE_BASE::ACCESS_TYPE_STORE);
-
-    const COUNTER counter = dl1Hit ? COUNTER_HIT : COUNTER_MISS;
-    profile[instId][counter]++;
+    cerr<<"STORE MULTI \n";
+    if (!dl1Hit) {
+        const BOOL l2Hit = l2->Access(addr, size, CACHE_BASE::ACCESS_TYPE_STORE);
+        
+        const COUNTER counter = l2Hit ? COUNTER_HIT : COUNTER_MISS;
+        profile[instId][counter]++;
+    } else {
+        profile[instId][COUNTER_HIT]++;
+    }
 }
+
 
 /* ===================================================================== */
 
@@ -105,6 +144,9 @@ VOID LoadSingle(ADDRINT addr, UINT32 instId)
 {
     // @todo we may access several cache lines for
     // first level D-cache
+
+    cerr<<"LOAD SINGLE \n";
+
     const BOOL dl1Hit = dl1->AccessSingleLine(addr, CACHE_BASE::ACCESS_TYPE_LOAD);
 
     const COUNTER counter = dl1Hit ? COUNTER_HIT : COUNTER_MISS;
@@ -116,27 +158,54 @@ VOID StoreSingle(ADDRINT addr, UINT32 instId)
 {
     // @todo we may access several cache lines for
     // first level D-cache
+
+    cerr<<"STORE SINGLE \n";
+
     const BOOL dl1Hit = dl1->AccessSingleLine(addr, CACHE_BASE::ACCESS_TYPE_STORE);
 
     const COUNTER counter = dl1Hit ? COUNTER_HIT : COUNTER_MISS;
     profile[instId][counter]++;
 }
 
+/* ===================================================================== 
+    KnobTrackLoads(KNOB_MODE_WRITEONCE, "pintool", "tl", "0" -> Fast loads 
+
+*/
+
+
+
+// If dl1 access not all_hit -> access l2
+
+VOID LoadMultiFast(ADDRINT addr, UINT32 size) { 
+    if (!dl1->Access(addr, size, CACHE_BASE::ACCESS_TYPE_LOAD)) {
+        l2->Access(addr, size, CACHE_BASE::ACCESS_TYPE_LOAD);
+    }
+}
+
 /* ===================================================================== */
 
-VOID LoadMultiFast(ADDRINT addr, UINT32 size) { dl1->Access(addr, size, CACHE_BASE::ACCESS_TYPE_LOAD); }
+VOID StoreMultiFast(ADDRINT addr, UINT32 size) { 
+    if (!dl1->Access(addr, size, CACHE_BASE::ACCESS_TYPE_STORE)) {
+        l2->Access(addr, size, CACHE_BASE::ACCESS_TYPE_STORE);
+    } 
+}
 
 /* ===================================================================== */
 
-VOID StoreMultiFast(ADDRINT addr, UINT32 size) { dl1->Access(addr, size, CACHE_BASE::ACCESS_TYPE_STORE); }
+VOID LoadSingleFast(ADDRINT addr) { 
+    if (!dl1->AccessSingleLine(addr, CACHE_BASE::ACCESS_TYPE_LOAD)) {
+        l2->AccessSingleLine(addr, CACHE_BASE::ACCESS_TYPE_LOAD);
+    } 
+}
+
 
 /* ===================================================================== */
 
-VOID LoadSingleFast(ADDRINT addr) { dl1->AccessSingleLine(addr, CACHE_BASE::ACCESS_TYPE_LOAD); }
-
-/* ===================================================================== */
-
-VOID StoreSingleFast(ADDRINT addr) { dl1->AccessSingleLine(addr, CACHE_BASE::ACCESS_TYPE_STORE); }
+VOID StoreSingleFast(ADDRINT addr) { 
+    if (!dl1->AccessSingleLine(addr, CACHE_BASE::ACCESS_TYPE_STORE)) {
+        l2->AccessSingleLine(addr, CACHE_BASE::ACCESS_TYPE_STORE);
+    } 
+}
 
 /* ===================================================================== */
 
@@ -148,11 +217,12 @@ VOID Instruction(INS ins, void* v)
     // it will be processed twice.
     // Iterating over memory operands ensures that instructions on IA-32 with
     // two read operands (such as SCAS and CMPS) are correctly handled.
+    
     for (UINT32 memOp = 0; memOp < memOperands; memOp++)
     {
         const UINT32 size = INS_MemoryOperandSize(ins, memOp);
         const BOOL single = (size <= 4);
-
+        
         if (INS_MemoryOperandIsRead(ins, memOp))
         {
             if (KnobTrackLoads)
@@ -229,13 +299,12 @@ VOID Fini(int code, VOID* v)
     // print D-cache profile
     // @todo what does this print
 
-    out << "PIN:MEMLATENCIES 1.0. 0x0\n";
-
     out << "#\n"
-           "# DCACHE stats\n"
+           "# DCACHE stats with L2 and LRU replacement:\n"
            "#\n";
 
     out << dl1->StatsLong("# ", CACHE_BASE::CACHE_TYPE_DCACHE);
+    out << l2->StatsLong("# L2 ", CACHE_BASE::CACHE_TYPE_DCACHE);
 
     if (KnobTrackLoads || KnobTrackStores)
     {
@@ -252,35 +321,38 @@ VOID Fini(int code, VOID* v)
 
 int main(int argc, char* argv[])
 {
+
+
+    std::cout<<"MAIN \n";
+
+
     PIN_InitSymbols();
 
-    if (PIN_Init(argc, argv))
-    {
+    if (PIN_Init(argc, argv)) {
         return Usage();
     }
 
-    dl1 = new DL1::CACHE("L1 Data Cache", KnobCacheSize.Value() * KILO, KnobLineSize.Value(), KnobAssociativity.Value());
+    // Create L1 and L2 cache instances with user-defined sizes
+    dl1 = new DL1::CACHE("L1 Data Cache", KnobCacheSize.Value() * KILO, 
+                          KnobLineSize.Value(), KnobAssociativity.Value());
+    
+    l2 = new L2::CACHE("L2 Cache", KnobCacheSize.Value() * 4 * KILO,  // L2 is 4x L1 size
+                        KnobLineSize.Value(), KnobAssociativity.Value() * 2); // Higher associativity
 
-    profile.SetKeyName("iaddr          ");
-    profile.SetCounterName("dcache:miss        dcache:hit");
+    std::cout << "L1 Cache Initialized: " << dl1 << endl;
+    std::cout << "L2 Cache Initialized: " << l2 << endl;
+                        
 
-    COUNTER_HIT_MISS threshold;
-
-    threshold[COUNTER_HIT]  = KnobThresholdHit.Value();
-    threshold[COUNTER_MISS] = KnobThresholdMiss.Value();
-
-    profile.SetThreshold(threshold);
+    profile.SetKeyName("iaddr");
+    profile.SetCounterName("dcache:miss dcache:hit");
 
     INS_AddInstrumentFunction(Instruction, 0);
     PIN_AddFiniFunction(Fini, 0);
-    //PIN_AddInternalExceptionHandler();
 
-    // Never returns
-
-    PIN_StartProgram();
-
+    PIN_StartProgram();  // Start execution
     return 0;
 }
+
 
 /* ===================================================================== */
 /* eof */

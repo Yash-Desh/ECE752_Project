@@ -1,0 +1,8 @@
+{
+    "files.associations": {
+        "*.ph": "cpp",
+        "__tree": "cpp",
+        "bitset": "cpp",
+        "set": "cpp"
+    }
+}
