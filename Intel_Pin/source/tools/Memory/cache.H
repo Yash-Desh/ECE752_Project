@@ -191,7 +191,7 @@ template< UINT32 MAX_ASSOCIATIVITY = 4 > class ROUND_ROBIN
 
         _tags[index] = tag;
         // condition typically faster than modulo
-        std::cout<<_nextReplaceIndex<<" ";
+        // std::cout<<_nextReplaceIndex<<" ";
 
         _nextReplaceIndex = (index == 0 ? _tagsLastIndex : index - 1);
     }
@@ -308,7 +308,7 @@ template < UINT32 MAX_ASSOCIATIVITY = 4 > class LEAST_RECENTLY_USED
         _tags[_nextReplaceIndex] = tag;
         _counters[_nextReplaceIndex] = CACHE_COUNTER(_tagsLastIndex);
         // std::cout<<_nextReplaceIndex<<" "<<_counters[_nextReplaceIndex].get_count()<<"\n";
-        std::cout<<_nextReplaceIndex<<" ";
+        // std::cout<<_nextReplaceIndex<<" ";
         // condition typically faster than modulo
         // _nextReplaceIndex = (index == 0 ? _tagsLastIndex : index - 1);
     }
