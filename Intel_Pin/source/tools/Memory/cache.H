@@ -154,6 +154,10 @@ template< UINT32 MAX_ASSOCIATIVITY = 4 > class ROUND_ROBIN
         ASSERTX(associativity <= MAX_ASSOCIATIVITY);
         _nextReplaceIndex = _tagsLastIndex;
 
+        std::cout<<"RR Cache Constructor called \n";
+        std::cout<<"MAX_ASSOCIATIVITY = "<<MAX_ASSOCIATIVITY<<"\n";
+        std::cout<<"_tagsLastIndex = "<<_tagsLastIndex<<"\n";
+
         for (INT32 index = _tagsLastIndex; index >= 0; index--)
         {
             _tags[index] = CACHE_TAG(0);
@@ -213,8 +217,12 @@ template < UINT32 MAX_ASSOCIATIVITY = 4 > class LEAST_RECENTLY_USED
         ASSERTX(associativity <= MAX_ASSOCIATIVITY);
         _nextReplaceIndex = _tagsLastIndex;
 
+        std::cout<<"LRU Cache Constructor called \n";
+        std::cout<<"MAX_ASSOCIATIVITY = "<<MAX_ASSOCIATIVITY<<"\n";
+        std::cout<<"_tagsLastIndex = "<<_tagsLastIndex<<"\n";
+
         // variable for initializing the counters
-        ADDRINT counter_value = MAX_ASSOCIATIVITY-1;
+        ADDRINT counter_value = _tagsLastIndex;
         // std::cout << "Hello 1";
         for (INT32 index = _tagsLastIndex; index >= 0; index--)
         {
@@ -500,6 +508,10 @@ template< class SET, UINT32 MAX_SETS, UINT32 STORE_ALLOCATION > class CACHE : pu
         {
             _sets[i].SetAssociativity(associativity);
         }
+        std::cout<<"cacheSize = "<<cacheSize<<"\n";
+        std::cout<<"lineSize = "<<lineSize<<"\n";
+        std::cout<<"associativity = "<<associativity<<"\n";
+        std::cout<<"MAX_SETS = "<<MAX_SETS<<"\n";
     }
 
     // modifiers
@@ -548,6 +560,7 @@ bool CACHE< SET, MAX_SETS, STORE_ALLOCATION >::Access(ADDRINT addr, UINT32 size,
     while (addr < highAddr);
 
     _access[accessType][allHit]++;
+    std::cout<<"Find called for set\n";
 
     return allHit;
 }
@@ -565,7 +578,7 @@ bool CACHE< SET, MAX_SETS, STORE_ALLOCATION >::AccessSingleLine(ADDRINT addr, AC
     SplitAddress(addr, tag, setIndex);
 
     SET& set = _sets[setIndex];
-    // std::cout<<"Find called for set "<<setIndex<<"\n";
+    std::cout<<"Find called for set "<<setIndex<<"\n";
 
     bool hit = set.Find(tag);
 
