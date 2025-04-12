@@ -13,6 +13,7 @@
 #include <string>
 
 #include "pin_util.H"
+// #include "../tools/Memory/mycache.h"  // include full path
 
 /*!
  *  @brief Checks if n is a power of 2.
@@ -79,6 +80,106 @@ class CACHE_TAG
     bool operator==(const CACHE_TAG& right) const { return _tag == right._tag; }
     operator ADDRINT() const { return _tag; }
 };
+
+class CACHE_COUNTER
+{
+    private:
+    UINT64 _counter;
+
+  public:
+    CACHE_COUNTER(UINT64 counter = 0) { _counter = counter; }
+    bool operator==(const CACHE_COUNTER& right) const { return _counter == right._counter; }
+    bool operator--() const { return _counter-1; }
+    void decrement(){_counter -= 1;}
+    // void set_count()
+    UINT64 get_count(){return _counter;}
+    operator UINT64() const { return _counter; }
+};
+
+class CACHE_METADATA
+{
+    private:
+    UINT64 _counter;
+    UINT32 _valid;
+    UINT64 _FPTR;
+
+  public:
+    CACHE_METADATA(UINT64 counter = 0) 
+    {
+        _counter = counter; 
+        _valid = 0;
+        _FPTR = 0;
+    }
+
+    // bool operator==(const CACHE_METADATA& right) const { return _counter == right._counter; }
+    // bool operator--() const { return _counter-1; }
+
+    void decrement_count(){_counter -= 1;}
+    UINT64 get_count(){return _counter;}
+    void set_count(UINT64 counter){_counter = counter;}
+
+    bool isValid(){return _valid;}
+    void toggleValid(){_valid = ~_valid;}
+
+    void set_FPTR(UINT64 FPTR){_FPTR = FPTR;}
+    UINT64 get_FPTR(){return _FPTR;}
+
+    // operator UINT64() const { return _counter; }
+};
+
+class DATA_METADATA{
+    private:
+    UINT32 _valid;
+    UINT64 _RPTR;
+    UINT64 _reuse_counter;
+
+    public:
+    DATA_METADATA(){
+        _valid = 0;
+        _reuse_counter = 0;
+        _RPTR = 0;
+    }
+    bool isValid(){return _valid;}
+    void toggleValid(){_valid = ~_valid;}
+
+    void set_RPTR(UINT64 FPTR){_RPTR = FPTR;}
+    UINT64 get_RPTR(){return _RPTR;}
+
+    UINT64 get_reuse_counter(){return _reuse_counter;}
+    void set_reuse_counter(UINT64 reuse_counter){_reuse_counter = reuse_counter;}
+    void increment_reuse_counter()
+    {   
+        if(_reuse_counter < 4)
+            _reuse_counter++;
+    }
+    void decrement_reuse_counter()
+    {
+        if(_reuse_counter > 0)
+            _reuse_counter--;
+    }
+
+};
+
+// extern UINT64 PTR;
+// extern DATA_METADATA _data_store;
+
+
+class DATA 
+{
+    public:
+    DATA_METADATA *_data_store;
+    UINT64 PTR;
+
+    DATA(UINT32 cacheSize, UINT32 lineSize)
+    {
+        _data_store = new DATA_METADATA[cacheSize/lineSize];
+        PTR = 0;
+    }
+
+};
+
+extern DATA data_array;
+
 
 /*!
  * Everything related to cache sets
@@ -168,6 +269,289 @@ template< UINT32 MAX_ASSOCIATIVITY = 4 > class ROUND_ROBIN
         _nextReplaceIndex = _tagsLastIndex;
     }
 };
+
+
+template < UINT32 MAX_ASSOCIATIVITY = 4 > class LEAST_RECENTLY_USED
+{
+    private:
+    CACHE_COUNTER _counters[MAX_ASSOCIATIVITY];
+    CACHE_TAG _tags[MAX_ASSOCIATIVITY];
+
+    UINT32 _tagsLastIndex; 
+    UINT32 _nextReplaceIndex;
+
+  public:
+    LEAST_RECENTLY_USED(UINT32 associativity = MAX_ASSOCIATIVITY) : _tagsLastIndex(associativity - 1)
+    {
+        ASSERTX(associativity <= MAX_ASSOCIATIVITY);
+        _nextReplaceIndex = _tagsLastIndex;
+
+        // std::cout<<"LRU Cache Constructor called \n";
+        // std::cout<<"MAX_ASSOCIATIVITY = "<<MAX_ASSOCIATIVITY<<"\n";
+        // std::cout<<"_tagsLastIndex = "<<_tagsLastIndex<<"\n";
+
+        // variable for initializing the counters
+        ADDRINT counter_value = _tagsLastIndex;
+        // std::cout << "Hello 1";
+        for (INT32 index = _tagsLastIndex; index >= 0; index--)
+        {
+            _tags[index] = CACHE_TAG(0);
+            // initialize the counters |0|1|2|3|
+            _counters[index] = CACHE_COUNTER(counter_value--);
+            
+        }
+    }
+
+    VOID SetAssociativity(UINT32 associativity)
+    {
+        ASSERTX(associativity <= MAX_ASSOCIATIVITY);
+        _tagsLastIndex    = associativity - 1;
+        _nextReplaceIndex = _tagsLastIndex;
+    }
+    UINT32 GetAssociativity(UINT32 associativity) { return _tagsLastIndex + 1; }
+
+    UINT32 Find(CACHE_TAG tag)
+    {
+        bool result = true;
+        // std::cout<<"Inside the find function\n";
+
+        for (UINT32 index = _tagsLastIndex; index >= 0 && index <= (_tagsLastIndex); index--)
+        {
+            // this is an ugly micro-optimization, but it does cause a
+            // tighter assembly loop for ARM that way ...
+            // std::cout<<"Inside for loop before if "<<index<<"\n";
+            // if(index >= 0)
+            // {
+
+                if (_tags[index] == tag) 
+                {
+                    // std::cout<<"hit on index "<<index<<"\n";
+                    // decrement the value of the other counters 
+                    // if(_counters[index] != MAX_ASSOCIATIVITY-1)
+                    // {
+                        for(UINT32 index2 = _tagsLastIndex; index2 >= 0 && index2 <= (_tagsLastIndex); index2--)
+                        {
+                            if(index2 != index && _counters[index2].get_count() > 0 && _counters[index2].get_count() > _counters[index].get_count())
+                            {
+                                _counters[index2].decrement();
+                                // std::cout << "Hello 2";
+                            }
+                        }
+                    // }
+
+                    // maximize the counter of found index
+                    _counters[index] = CACHE_COUNTER(_tagsLastIndex);
+                    
+                    goto end;
+                }
+            // }
+        }
+        // std::cout<<"After the for loop\n";
+        result = false;
+
+    end:
+        return result;
+    }
+
+    VOID Replace(CACHE_TAG tag)
+    {
+        // Index to be replaced
+        //const UINT32 index = _nextReplaceIndex;
+
+        // determine the counter with the min count value
+
+        // UINT32 min_counter = MAX_ASSOCIATIVITY;
+        for(UINT32 index = _tagsLastIndex; index >= 0 && index <= (_tagsLastIndex); index--)
+        {
+            if(_counters[index].get_count() ==  0)
+            {
+                _nextReplaceIndex = index;
+                // min_counter = _counters[index];
+                // std::cout << "Hello 3";
+                break;
+            }
+        }
+
+        // decrement the value of the other counters 
+        for(UINT32 index = _tagsLastIndex; index >= 0 && index <= (_tagsLastIndex); index--)
+        {
+            if(index != _nextReplaceIndex && _counters[index].get_count() > 0)
+            {
+                _counters[index].decrement();
+                // std::cout << "Hello 4";
+            }
+        }
+
+        _tags[_nextReplaceIndex] = tag;
+        _counters[_nextReplaceIndex] = CACHE_COUNTER(_tagsLastIndex);
+        // std::cout<<_nextReplaceIndex<<" "<<_counters[_nextReplaceIndex].get_count()<<"\n";
+        // std::cout<<_nextReplaceIndex<<" ";
+        // condition typically faster than modulo
+        // _nextReplaceIndex = (index == 0 ? _tagsLastIndex : index - 1);
+    }
+    VOID Flush()
+    {
+        for (INT32 index = _tagsLastIndex; index >= 0; index--)
+        {
+            _tags[index] = 0;
+            _counters[index] = CACHE_COUNTER(0);
+            // std::cout << "Hello 5";
+        }
+        _nextReplaceIndex = _tagsLastIndex;
+    }
+};
+
+
+template < UINT32 MAX_ASSOCIATIVITY = 4 > class VARIABLE_WAY
+{
+    private:
+    CACHE_TAG _tags[MAX_ASSOCIATIVITY];
+    CACHE_METADATA _metadatas[MAX_ASSOCIATIVITY];
+
+    UINT32 _tagsLastIndex; 
+    UINT32 _nextReplaceIndex;
+    UINT32 max_associativity;
+    UINT32 current_associativity;
+    UINT32 TDR = 1;
+
+  public:
+  VARIABLE_WAY(UINT32 associativity = MAX_ASSOCIATIVITY) : _tagsLastIndex(associativity - 1)
+    {
+        ASSERTX(associativity <= MAX_ASSOCIATIVITY);
+        _nextReplaceIndex = _tagsLastIndex;
+        current_associativity = associativity;
+        max_associativity = TDR*associativity;    // --> this could be parameterized as the TDR
+        // std::cout<<"LRU Cache Constructor called \n";
+        // std::cout<<"MAX_ASSOCIATIVITY = "<<MAX_ASSOCIATIVITY<<"\n";
+        // std::cout<<"_tagsLastIndex = "<<_tagsLastIndex<<"\n";
+
+        // variable for initializing the counters
+        ADDRINT counter_value = _tagsLastIndex;
+        // std::cout << "Hello 1";
+        for (INT32 index = _tagsLastIndex; index >= 0; index--)
+        {
+            _tags[index] = CACHE_TAG(0);
+            // initialize the counters |0|1|2|3|
+            _metadatas[index] = CACHE_METADATA(counter_value--);
+            
+        }
+    }
+
+    VOID SetAssociativity(UINT32 associativity)
+    {
+        ASSERTX(associativity <= MAX_ASSOCIATIVITY);
+        _tagsLastIndex    = associativity - 1;
+        _nextReplaceIndex = _tagsLastIndex;
+        current_associativity = associativity;
+        max_associativity = TDR*associativity;    // --> this could be parameterized as the TDR
+    }
+    UINT32 GetAssociativity(UINT32 associativity) { return _tagsLastIndex + 1; }
+
+    UINT32 Find(CACHE_TAG tag)
+    {
+        bool result = true;
+        std::cout<<"Inside the find function\n"<<"current_associativity = "<< current_associativity<<"\n";
+
+        for (UINT32 index = (current_associativity-1); index >= 0 && index <= (current_associativity-1); index--)
+        {
+            // this is an ugly micro-optimization, but it does cause a
+            // tighter assembly loop for ARM that way ...
+            std::cout<<"Inside for loop before if "<<index<<"\n";
+            // if(index >= 0)
+            // {
+
+                if (_tags[index] == tag) 
+                {
+                    std::cout<<"hit on index "<<index<<"\n";
+                    // decrement the value of the other counters 
+                    // if(_counters[index] != MAX_ASSOCIATIVITY-1)
+                    // {
+                        for(UINT32 index2 = (current_associativity-1); index2 >= 0 && index2 <= (current_associativity-1); index2--)
+                        {
+                            if(index2 != index && _metadatas[index2].get_count() > 0 && _metadatas[index2].get_count() > _metadatas[index].get_count())
+                            {
+                                _metadatas[index2].decrement_count();
+                                // std::cout << "Hello 2";
+                            }
+                        }
+                    // }
+
+                    // maximize the counter of found index
+                    _metadatas[index].set_count(current_associativity-1);
+                    data_array._data_store[_metadatas[index].get_FPTR()].increment_reuse_counter();
+                    
+                    goto end;
+                }
+            // }
+        }
+        std::cout<<"After the for loop\n";
+        result = false;
+
+    end:
+        return result;
+    }
+
+    VOID Replace(CACHE_TAG tag)
+    {
+        // std::cout<<"Inside the Replace() function\n";
+
+        // ------------------------ calculate the number of valid ways ------------------------
+        // UINT32 num_valid_ways = 0;
+        // for (UINT32 index = (max_associativity-1); index >= 0 && index <= (max_associativity-1); index--)
+        // {
+        //     if(_metadatas[index].isValid())
+        //     {
+        //         num_valid_ways++;
+        //     }
+        // }
+
+        // ------------------------ case-1: At least 1 invalid way in the target set ------------------------
+        if(current_associativity != max_associativity)
+        {
+        }
+
+        // ------------------------ case-2: All the ways are valid in the target set ------------------------
+        else{
+            for(UINT32 index = (max_associativity-1); index >= 0 && index <= (max_associativity-1); index--)
+            {
+                if(_metadatas[index].get_count() ==  0)
+                {
+                    _nextReplaceIndex = index;
+                    // min_counter = _counters[index];
+                    // std::cout << "Hello 3";
+                    break;
+                }
+            }
+
+            // decrement the value of the other counters 
+            for(UINT32 index = (max_associativity-1); index >= 0 && index <= (max_associativity-1); index--)
+            {
+                if(index != _nextReplaceIndex && _metadatas[index].get_count() > 0)
+                {
+                    _metadatas[index].decrement_count();
+                    // std::cout << "Hello 4";
+                }
+            }
+
+            _tags[_nextReplaceIndex] = tag;
+            _metadatas[_nextReplaceIndex].set_count(max_associativity-1);
+            _metadatas[_nextReplaceIndex].toggleValid();
+            data_array._data_store[_metadatas[_nextReplaceIndex].get_FPTR()].set_reuse_counter(0);
+            data_array.PTR = _metadatas[_nextReplaceIndex].get_FPTR()+1;
+        }
+    }
+    VOID Flush()
+    {
+        // for (INT32 index = _tagsLastIndex; index >= 0; index--)
+        // {
+        //     _tags[index] = 0;
+        //     _counters[index] = CACHE_COUNTER(0);
+        //     // std::cout << "Hello 5";
+        // }
+        // _nextReplaceIndex = _tagsLastIndex;
+    }
+};
+
 
 } // namespace CACHE_SET
 
@@ -440,9 +824,16 @@ template< class SET, UINT32 MAX_SETS, UINT32 STORE_ALLOCATION > void CACHE< SET,
     IncResetCounter();
 }
 
+
+// extern UL2::CACHE ul2;
+
 // define shortcuts
 #define CACHE_DIRECT_MAPPED(MAX_SETS, ALLOCATION) CACHE< CACHE_SET::DIRECT_MAPPED, MAX_SETS, ALLOCATION >
 #define CACHE_ROUND_ROBIN(MAX_SETS, MAX_ASSOCIATIVITY, ALLOCATION) \
     CACHE< CACHE_SET::ROUND_ROBIN< MAX_ASSOCIATIVITY >, MAX_SETS, ALLOCATION >
+#define CACHE_LEAST_RECENTLY_USED(MAX_SETS, MAX_ASSOCIATIVITY, ALLOCATION) \
+    CACHE< CACHE_SET::LEAST_RECENTLY_USED< MAX_ASSOCIATIVITY >, MAX_SETS, ALLOCATION >
+#define CACHE_VARIABLE_WAY(MAX_SETS, MAX_ASSOCIATIVITY, ALLOCATION) \
+    CACHE< CACHE_SET::VARIABLE_WAY< MAX_ASSOCIATIVITY >, MAX_SETS, ALLOCATION >
 
 #endif // PIN_CACHE_H
