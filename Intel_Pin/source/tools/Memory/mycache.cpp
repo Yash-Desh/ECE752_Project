@@ -2,9 +2,8 @@
  #include <fstream>
  #include <unordered_map>
  #include "pin.H"
-// #include "mycache.h"
  
- typedef UINT32 CACHE_STATS; // type of cache hit/miss counters
+ typedef UINT64 CACHE_STATS; // type of cache hit/miss counters
  
  #include "pin_cache.H"
   
@@ -41,7 +40,7 @@
  namespace UL2
  {
  // 2nd level unified cache: 2 MB, 64 B lines, direct mapped
- const UINT32 cacheSize                         = 2 * MEGA;
+ const UINT32 cacheSize                         = 2* MEGA;
  const UINT32 lineSize                          = 64;
  const UINT32 associativity                     = 4;
  const CACHE_ALLOC::STORE_ALLOCATION allocation = CACHE_ALLOC::STORE_ALLOCATE;
@@ -51,9 +50,11 @@
  // typedef CACHE_DIRECT_MAPPED(max_sets, allocation) CACHE;
  // typedef CACHE_ROUND_ROBIN(max_sets, associativity, allocation) CACHE;
 //  typedef CACHE_LEAST_RECENTLY_USED(max_sets, associativity, allocation) CACHE;
- typedef CACHE_VARIABLE_WAY(max_sets, associativity, allocation) CACHE;
+ // typedef CACHE_VARIABLE_WAY(max_sets, associativity, allocation) CACHE;
+ 
  } // namespace UL2
- UL2::CACHE ul2("L2 Unified Cache", UL2::cacheSize, UL2::lineSize, UL2::associativity);
+VWAY_CACHE ul2("L2 Unified Cache", UL2::cacheSize, UL2::lineSize, UL2::associativity);
+// static UL2::CACHE ul2("L2 Unified Cache", UL2::cacheSize, UL2::lineSize, UL2::associativity);
  
  // Define Data-Store
  DATA data_array (UL2::cacheSize, UL2::lineSize);
@@ -76,7 +77,7 @@
  {
     // second level unified cache
     //  const BOOL ul2Hit = ul2.Access(addr, size, accessType);
-    std::cout<<"Ul2Access Called\n";
+    // std::cout<<"Ul2Access Called\n";
     ul2.Access(addr, size, accessType);
     //  // third level unified cache
     //  if (!ul2Hit) ul3.Access(addr, size, accessType);
