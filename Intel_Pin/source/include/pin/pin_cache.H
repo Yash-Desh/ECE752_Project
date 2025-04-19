@@ -792,7 +792,7 @@ class VWAY_CACHE : public CACHE_BASE
          bool result = true;
          //std::cout<<"Inside the find function\n"<<"current_associativity = "<< current_associativity<<"\n";
  
-         if(set_data[set_index].current_associativity)
+         if(set_data[set_index].current_associativity>0)
          {
             for (UINT32 index = 0;  index <= (set_data[set_index].current_associativity-1); index++)
             {
@@ -836,7 +836,8 @@ class VWAY_CACHE : public CACHE_BASE
  
      VOID Replace(CACHE_TAG tag, UINT32 set_index)
      {
-         // std::cout<<"Inside the Replace() function\n";
+        // if(set_index == 0)
+            //std::cout<<"Set Index is 0\n"<<std::flush;
  
          // ################################ case-1: At least 1 invalid way in the target set ################################
          if(set_data[set_index].current_associativity != set_data[set_index].max_associativity)
@@ -858,7 +859,7 @@ class VWAY_CACHE : public CACHE_BASE
                 data_array.PTR++;
 
                 // reset PTR on reaching the end of the data store 
-                if(data_array.PTR == (data_array.data_store_size-1)) //give a variable name
+                if(data_array.PTR == (data_array.data_store_size)) //give a variable name
                     data_array.PTR = 0;
              }// PTR points to the data victim
 
@@ -870,7 +871,9 @@ class VWAY_CACHE : public CACHE_BASE
              UINT64 new_rptr = set_index * set_data[set_index].max_associativity + victim_index;
              data_array._data_store[data_array.PTR].set_RPTR(new_rptr);
  
-             data_array.PTR++; //Give this new block some time to be resused. 
+             data_array.PTR++; //Give this new block some time to be resused.
+             if(data_array.PTR == (data_array.data_store_size)) //give a variable name
+                data_array.PTR = 0;
              
              // ------------------------ Invalidate tag victim ------------------------
              if(data_victim_rptr != UINT64(-1))
@@ -879,8 +882,11 @@ class VWAY_CACHE : public CACHE_BASE
                  UINT32 victim_way = data_victim_rptr%set_data[set_index].max_associativity;
 
                  tag_stores[victim_set_index][victim_way].toggleValid();
-                //  if(set_data[victim_set_index].current_associativity > 0)
-                //     set_data[victim_set_index].current_associativity--;
+                 if(set_data[victim_set_index].current_associativity > 0)
+                {
+                    set_data[victim_set_index].current_associativity--;
+                    // std::cout<<"Set Index = "<<victim_set_index<<", current_associativity = "<<set_data[victim_set_index].current_associativity<<"\n"<<std::flush;
+                }
              }
          }
  
@@ -910,6 +916,8 @@ class VWAY_CACHE : public CACHE_BASE
             //  tag_stores[set_index][victim_index].toggleValid();
              data_array._data_store[tag_stores[set_index][victim_index].get_FPTR()].set_reuse_counter(0);
              data_array.PTR = tag_stores[set_index][victim_index].get_FPTR()+1;
+             if(data_array.PTR == (data_array.data_store_size)) //give a variable name
+                data_array.PTR = 0;
          }
      }
  };
