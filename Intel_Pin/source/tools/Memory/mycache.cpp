@@ -10,37 +10,39 @@
  namespace IL1
  {
  // 1st level instruction cache: 32 kB, 32 B lines, 32-way associative
- const UINT32 cacheSize                         = 32 * KILO;
- const UINT32 lineSize                          = 32;
- const UINT32 associativity                     = 32;
- const CACHE_ALLOC::STORE_ALLOCATION allocation = CACHE_ALLOC::STORE_NO_ALLOCATE;
+ const UINT32 cacheSize                         = 16 * KILO;
+ const UINT32 lineSize                          = 64;
+ const UINT32 associativity                     = 2;
+ const CACHE_ALLOC::STORE_ALLOCATION allocation = CACHE_ALLOC::STORE_ALLOCATE;
  
  const UINT32 max_sets          = cacheSize / (lineSize * associativity);
  const UINT32 max_associativity = associativity;
  
- typedef CACHE_ROUND_ROBIN(max_sets, max_associativity, allocation) CACHE;
+//  typedef CACHE_ROUND_ROBIN(max_sets, max_associativity, allocation) CACHE;
+typedef CACHE_LEAST_RECENTLY_USED(max_sets, associativity, allocation) CACHE;
  } // namespace IL1
  static IL1::CACHE il1("L1 Instruction Cache", IL1::cacheSize, IL1::lineSize, IL1::associativity);
  
  namespace DL1
  {
  // 1st level data cache: 32 kB, 32 B lines, 32-way associative
- const UINT32 cacheSize                         = 32 * KILO;
- const UINT32 lineSize                          = 32;
- const UINT32 associativity                     = 32;
- const CACHE_ALLOC::STORE_ALLOCATION allocation = CACHE_ALLOC::STORE_NO_ALLOCATE;
+ const UINT32 cacheSize                         = 16 * KILO;
+ const UINT32 lineSize                          = 64;
+ const UINT32 associativity                     = 2;
+ const CACHE_ALLOC::STORE_ALLOCATION allocation = CACHE_ALLOC::STORE_ALLOCATE;
  
  const UINT32 max_sets          = cacheSize / (lineSize * associativity);
  const UINT32 max_associativity = associativity;
  
- typedef CACHE_ROUND_ROBIN(max_sets, max_associativity, allocation) CACHE;
+//  typedef CACHE_ROUND_ROBIN(max_sets, max_associativity, allocation) CACHE;
+typedef CACHE_LEAST_RECENTLY_USED(max_sets, associativity, allocation) CACHE;
  } // namespace DL1
  static DL1::CACHE dl1("L1 Data Cache", DL1::cacheSize, DL1::lineSize, DL1::associativity);
  
  namespace UL2
  {
  // 2nd level unified cache: 2 MB, 64 B lines, direct mapped
- const UINT32 cacheSize                         = 2* MEGA;
+ const UINT32 cacheSize                         = 256* KILO;
  const UINT32 lineSize                          = 64;
  const UINT32 associativity                     = 4;
  const CACHE_ALLOC::STORE_ALLOCATION allocation = CACHE_ALLOC::STORE_ALLOCATE;
@@ -49,24 +51,40 @@
  
  // typedef CACHE_DIRECT_MAPPED(max_sets, allocation) CACHE;
  // typedef CACHE_ROUND_ROBIN(max_sets, associativity, allocation) CACHE;
-//  typedef CACHE_LEAST_RECENTLY_USED(max_sets, associativity, allocation) CACHE;
+ typedef CACHE_LEAST_RECENTLY_USED(max_sets, associativity, allocation) CACHE;
  // typedef CACHE_VARIABLE_WAY(max_sets, associativity, allocation) CACHE;
  
  } // namespace UL2
-VWAY_CACHE ul2("L2 Unified Cache", UL2::cacheSize, UL2::lineSize, UL2::associativity);
-// static UL2::CACHE ul2("L2 Unified Cache", UL2::cacheSize, UL2::lineSize, UL2::associativity);
+// VWAY_CACHE ul2("L2 Unified Cache", UL2::cacheSize, UL2::lineSize, UL2::associativity);
+static UL2::CACHE ul2("L2 Unified Cache", UL2::cacheSize, UL2::lineSize, UL2::associativity);
  
- // Define Data-Store
- DATA data_array (UL2::cacheSize, UL2::lineSize);
+//  // Define Data-Store
+DATA data_array (UL2::cacheSize, UL2::lineSize);
 
  static VOID Fini(int code, VOID* v)
  {
      std::ofstream out ("mycache.out");
      out << "PIN:MEMLATENCIES 1.0. 0x0\n";
  
-     out << "#\n"
-            "# DCACHE stats\n"
-            "#\n";
+     out << "#\n# L1 Instruction Cache stats\n";
+     out << "# IL1 Cache Size           : "<<IL1::cacheSize<<"\n";
+     out << "# IL1 Line Size            : "<<IL1::lineSize<<"\n";
+     out << "# IL1 Associativity        : "<<IL1::associativity<<"\n";
+     out << "# IL1 Replacement Policy   : LRU\n";
+
+     out << "#\n# L1 Data Cache stats\n";
+     out << "# DL1 Cache Size           : "<<DL1::cacheSize<<"\n";
+     out << "# DL1 Line Size            : "<<DL1::lineSize<<"\n";
+     out << "# DL1 Associativity        : "<<DL1::associativity<<"\n";
+     out << "# DL1 Replacement Policy   : LRU\n";
+
+     out << "#\n# L2 Unified Cache stats\n";
+     out << "# UL2 Cache Size           : "<<UL2::cacheSize<<"\n";
+     out << "# UL2 Line Size            : "<<UL2::lineSize<<"\n";
+     out << "# UL2 Associativity        : "<<UL2::associativity<<"\n";
+     out << "# UL2 Replacement Policy   : LRU\n";
+
+     out <<"\n####################################################################\n";
      out << il1;
      out << dl1;
      out << ul2;
@@ -77,7 +95,7 @@ VWAY_CACHE ul2("L2 Unified Cache", UL2::cacheSize, UL2::lineSize, UL2::associati
  {
     // second level unified cache
     //  const BOOL ul2Hit = ul2.Access(addr, size, accessType);
-    // std::cout<<"Ul2Access Called\n";
+    //std::cout<<"Ul2Access Called on address = "<<addr<<"\n"<<std::flush;
     ul2.Access(addr, size, accessType);
     //  // third level unified cache
     //  if (!ul2Hit) ul3.Access(addr, size, accessType);

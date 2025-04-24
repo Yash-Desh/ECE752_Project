@@ -180,6 +180,19 @@ class DATA_METADATA{
 extern UINT64 PTR;
 extern DATA_METADATA _data_store;
 
+class DATA 
+{
+    DATA_METADATA *_data_store;
+    UINT64 PTR;
+
+    DATA(UINT32 cacheSize, UINT32 lineSize)
+    {
+        _data_store = new DATA_METADATA[cacheSize/lineSize];
+        PTR = 0;
+    }
+
+};
+
 /*!
  * Everything related to cache sets
  */
@@ -397,6 +410,15 @@ template < UINT32 MAX_ASSOCIATIVITY = 4 > class LEAST_RECENTLY_USED
         }
         _nextReplaceIndex = _tagsLastIndex;
     }
+
+    VOID debug_replacement_policy()
+     {
+        for(UINT32 index = _tagsLastIndex; index >= 0 && index <= (_tagsLastIndex); index--)
+        {
+            std::cout<<"Way-"<<index<<": tag="<<_tags[index]<<", counter="<<_counters[index]<<" :: ";
+        }
+        std::cout<<"\n\n\n";
+     }
 };
 
 template < UINT32 MAX_ASSOCIATIVITY = 4 > class VARIABLE_WAY
@@ -775,8 +797,17 @@ bool CACHE< SET, MAX_SETS, STORE_ALLOCATION >::Access(ADDRINT addr, UINT32 size,
         if ((!localHit) && (accessType == ACCESS_TYPE_LOAD || STORE_ALLOCATION == CACHE_ALLOC::STORE_ALLOCATE))
         {
             // std::cout<<"Replace called for set "<<setIndex<<"\n";
+            if(setIndex == 25)
+                std::cout<<"Miss!!\n";
             set.Replace(tag);
         }
+
+         // debug 
+         if(setIndex == 25)
+         {
+            std::cout<<"Memory Access at address: "<<addr<<", tag:"<<tag<<", setIndex:"<<setIndex<<"\n";
+            set.debug_replacement_policy();
+         }
 
         addr = (addr & notLineMask) + lineSize; // start of next cache line
     }
@@ -809,7 +840,16 @@ bool CACHE< SET, MAX_SETS, STORE_ALLOCATION >::AccessSingleLine(ADDRINT addr, AC
     if ((!hit) && (accessType == ACCESS_TYPE_LOAD || STORE_ALLOCATION == CACHE_ALLOC::STORE_ALLOCATE))
     {
         // std::cout<<"Replace called for set "<<setIndex<<"\n";
+        if(setIndex == 25)
+            std::cout<<"Miss!!\n";
         set.Replace(tag);
+    }
+
+    // debug 
+    if(setIndex == 25)
+    {
+       std::cout<<"Memory Access at address: "<<addr<<", tag:"<<tag<<", setIndex:"<<setIndex<<"\n";
+       set.debug_replacement_policy();
     }
 
     _access[accessType][hit]++;

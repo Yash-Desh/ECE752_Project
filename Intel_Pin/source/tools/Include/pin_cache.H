@@ -13,6 +13,7 @@
 #define KILO 1024
 #define MEGA (KILO * KILO)
 #define GIGA (KILO * MEGA)
+#include <unordered_map>
 
 typedef UINT64 CACHE_STATS; // type of cache hit/miss counters
 
@@ -110,6 +111,20 @@ class CACHE_COUNTER
     void decrement(){_counter -= 1;}
     UINT64 get_count(){return _counter;}
     operator UINT64() const { return _counter; }
+};
+
+class CACHE_NODE {
+    public:
+    CACHE_TAG tag_obj;
+    
+    CACHE_NODE * next;
+    CACHE_NODE * prev;
+    CACHE_NODE(CACHE_TAG _tag) 
+    {
+        tag_obj = _tag;
+      next = NULL;
+      prev = NULL;
+    }
 };
 
 /*!
@@ -305,6 +320,117 @@ template < UINT32 MAX_ASSOCIATIVITY = 4 > class LEAST_RECENTLY_USED
             _tags[index] = 0;
         }
         _nextReplaceIndex = _tagsLastIndex;
+    }
+};
+
+
+
+template< UINT32 MAX_ASSOCIATIVITY = 4 > class LRU
+{
+  private:
+    // CACHE_TAG _tags[MAX_ASSOCIATIVITY];
+    UINT32 _tagsLastIndex;
+    // UINT32 _nextReplaceIndex;
+
+    CACHE_NODE * head = new CACHE_NODE(-1);
+    CACHE_NODE * tail = new CACHE_NODE(-1);
+    UINT32 set_associativity;
+    std::unordered_map < CACHE_TAG, CACHE_NODE * > m;
+
+  public:
+  LRU(UINT32 associativity = MAX_ASSOCIATIVITY) : _tagsLastIndex(associativity - 1)
+    {
+        ASSERTX(associativity <= MAX_ASSOCIATIVITY);
+        set_associativity = associativity;
+        head -> next = tail;
+        tail -> prev = head;
+        // _nextReplaceIndex = _tagsLastIndex;
+
+        // for (INT32 index = _tagsLastIndex; index >= 0; index--)
+        // {
+        //     _tags[index] = CACHE_TAG(0);
+        // }
+    }
+
+    VOID SetAssociativity(UINT32 associativity)
+    {
+        ASSERTX(associativity <= MAX_ASSOCIATIVITY);
+        _tagsLastIndex    = associativity - 1;
+        // _nextReplaceIndex = _tagsLastIndex;
+        set_associativity = associativity;
+    }
+    UINT32 GetAssociativity(UINT32 associativity) { return _tagsLastIndex + 1; }
+
+    void addnode(CACHE_NODE * newnode) {
+        CACHE_NODE * temp = head -> next;
+        newnode -> next = temp;
+        newnode -> prev = head;
+        head -> next = newnode;
+        temp -> prev = newnode;
+      }
+
+      void deletenode(CACHE_NODE * delnode) {
+        CACHE_NODE * delprev = delnode -> prev;
+        CACHE_NODE * delnext = delnode -> next;
+        delprev -> next = delnext;
+        delnext -> prev = delprev;
+      }
+
+    UINT32 Find(CACHE_TAG tag)
+    {
+        bool result = true;
+
+    //     for (INT32 index = _tagsLastIndex; index >= 0; index--)
+    //     {
+    //         // this is an ugly micro-optimization, but it does cause a
+    //         // tighter assembly loop for ARM that way ...
+    //         if (_tags[index] == tag) goto end;
+    //     }
+    //     result = false;
+
+    // end:
+
+    if (m.find(tag) != m.end()) {
+        CACHE_NODE * resnode = m[tag];
+        int res = resnode -> tag_obj;
+        m.erase(tag);
+        deletenode(resnode);
+        addnode(resnode);
+        m[tag] = head -> next;
+        return res;
+      }
+
+        return result;
+    }
+
+    VOID Replace(CACHE_TAG tag)
+    {
+        // // g++ -O3 too dumb to do CSE on following lines?!
+        // const UINT32 index = _nextReplaceIndex;
+
+        // _tags[index] = tag;
+        // // condition typically faster than modulo
+        // _nextReplaceIndex = (index == 0 ? _tagsLastIndex : index - 1);
+        if (m.find(tag) != m.end()) {
+            CACHE_NODE * existingnode = m[tag];
+            m.erase(tag);
+            deletenode(existingnode);
+          }
+          if (m.size() == set_associativity) {
+            m.erase(tail -> prev -> tag_obj);
+            deletenode(tail -> prev);
+          } 
+      
+          addnode(new CACHE_NODE(tag));
+          m[tag] = head -> next;
+    }
+    VOID Flush()
+    {
+        // for (INT32 index = _tagsLastIndex; index >= 0; index--)
+        // {
+        //     _tags[index] = 0;
+        // }
+        // _nextReplaceIndex = _tagsLastIndex;
     }
 };
 

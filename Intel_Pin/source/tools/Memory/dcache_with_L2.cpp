@@ -73,7 +73,8 @@ namespace L2
     const UINT32 max_associativity = 16; // Higher associativity
     const CACHE_ALLOC::STORE_ALLOCATION allocation = CACHE_ALLOC::STORE_ALLOCATE;
 
-    typedef CACHE_LEAST_RECENTLY_USED(max_sets, max_associativity, allocation) CACHE;
+    typedef CACHE_ROUND_ROBIN(max_sets, max_associativity, allocation) CACHE;
+    // typedef CACHE_LEAST_RECENTLY_USED(max_sets, max_associativity, allocation) CACHE;
 }
 
 L2::CACHE* l2 = NULL;    // L2 cache instance

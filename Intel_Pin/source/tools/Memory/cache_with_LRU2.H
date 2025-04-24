@@ -1,0 +1,745 @@
+/*
+ * Copyright (C) 2004-2021 Intel Corporation.
+ * SPDX-License-Identifier: MIT
+ */
+
+/*! @file
+ *  This file contains a configurable cache class
+ */
+
+ #ifndef PIN_CACHE_H
+ #define PIN_CACHE_H
+ 
+ #define KILO 1024
+ #define MEGA (KILO * KILO)
+ #define GIGA (KILO * MEGA)
+ 
+ typedef UINT64 CACHE_STATS; // type of cache hit/miss counters
+ #include <unordered_map>
+ #include <sstream>
+ using std::ostringstream;
+ using std::string;
+ /*! RMR (rodric@gmail.com) 
+  *   - temporary work around because decstr()
+  *     casts 64 bit ints to 32 bit ones
+  */
+ static string mydecstr(UINT64 v, UINT32 w)
+ {
+     ostringstream o;
+     o.width(w);
+     o << v;
+     string str(o.str());
+     return str;
+ }
+ 
+ /*!
+  *  @brief Checks if n is a power of 2.
+  *  @returns true if n is power of 2
+  */
+ static inline bool IsPower2(UINT32 n) { return ((n & (n - 1)) == 0); }
+ 
+ /*!
+  *  @brief Computes floor(log2(n))
+  *  Works by finding position of MSB set.
+  *  @returns -1 if n == 0.
+  */
+ static inline INT32 FloorLog2(UINT32 n)
+ {
+     INT32 p = 0;
+ 
+     if (n == 0) return -1;
+ 
+     if (n & 0xffff0000)
+     {
+         p += 16;
+         n >>= 16;
+     }
+     if (n & 0x0000ff00)
+     {
+         p += 8;
+         n >>= 8;
+     }
+     if (n & 0x000000f0)
+     {
+         p += 4;
+         n >>= 4;
+     }
+     if (n & 0x0000000c)
+     {
+         p += 2;
+         n >>= 2;
+     }
+     if (n & 0x00000002)
+     {
+         p += 1;
+     }
+ 
+     return p;
+ }
+ 
+ /*!
+  *  @brief Computes floor(log2(n))
+  *  Works by finding position of MSB set.
+  *  @returns -1 if n == 0.
+  */
+ static inline INT32 CeilLog2(UINT32 n) { return FloorLog2(n - 1) + 1; }
+ 
+ /*!
+  *  @brief Cache tag - self clearing on creation
+  */
+ class CACHE_TAG
+ {
+   private:
+     ADDRINT _tag;
+ 
+   public:
+     CACHE_TAG(ADDRINT tag = 0) { _tag = tag; }
+     bool operator==(const CACHE_TAG& right) const { return _tag == right._tag; }
+     operator ADDRINT() const { return _tag; }
+     ADDRINT value() const { return _tag; }
+ };
+ 
+ class CACHE_NODE {
+     public:
+     CACHE_TAG tag_obj;
+     
+     CACHE_NODE * next;
+     CACHE_NODE * prev;
+     CACHE_NODE(CACHE_TAG _tag) 
+     {
+         tag_obj = _tag;
+         next = NULL;
+         prev = NULL;
+     }
+ };
+ 
+ 
+ class CACHE_COUNTER
+ {
+     private:
+     UINT64 _counter;
+ 
+   public:
+     CACHE_COUNTER(UINT64 counter = 0) { _counter = counter; }
+     bool operator==(const CACHE_COUNTER& right) const { return _counter == right._counter; }
+     bool operator--() const { return _counter-1; }
+     void decrement(){_counter -= 1;}
+     // void set_count()
+     UINT64 get_count(){return _counter;}
+     operator UINT64() const { return _counter; }
+ };
+ 
+ 
+ // Custom hash specialization for CACHE_TAG
+ namespace std {
+     template <>
+     struct hash<CACHE_TAG> {
+         size_t operator()(const CACHE_TAG& tag) const {
+             return hash<ADDRINT>()(tag);  // or tag.value() if you prefer
+         }
+     };
+ }
+ 
+ /*!
+  * Everything related to cache sets
+  */
+ namespace CACHE_SET
+ {
+ /*!
+  *  @brief Cache set direct mapped
+  */
+ class DIRECT_MAPPED
+ {
+   private:
+     CACHE_TAG _tag;
+ 
+   public:
+     DIRECT_MAPPED(UINT32 associativity = 1) { ASSERTX(associativity == 1); }
+ 
+     VOID SetAssociativity(UINT32 associativity) { ASSERTX(associativity == 1); }
+     UINT32 GetAssociativity(UINT32 associativity) { return 1; }
+ 
+     UINT32 Find(CACHE_TAG tag) { return (_tag == tag); }
+     VOID Replace(CACHE_TAG tag) { _tag = tag; }
+ };
+ 
+ 
+ 
+ /*!
+  *  @brief Cache set with round robin replacement
+  */
+ template< UINT32 MAX_ASSOCIATIVITY = 4 > class ROUND_ROBIN
+ {
+   private:
+     CACHE_TAG _tags[MAX_ASSOCIATIVITY];
+     UINT32 _tagsLastIndex;
+     UINT32 _nextReplaceIndex;
+ 
+   public:
+     ROUND_ROBIN(UINT32 associativity = MAX_ASSOCIATIVITY) : _tagsLastIndex(associativity - 1)
+     {
+         ASSERTX(associativity <= MAX_ASSOCIATIVITY);
+         _nextReplaceIndex = _tagsLastIndex;
+ 
+         // std::cout<<"RR Cache Constructor called \n";
+         // std::cout<<"MAX_ASSOCIATIVITY = "<<MAX_ASSOCIATIVITY<<"\n";
+         // std::cout<<"_tagsLastIndex = "<<_tagsLastIndex<<"\n";
+ 
+         for (INT32 index = _tagsLastIndex; index >= 0; index--)
+         {
+             _tags[index] = CACHE_TAG(0);
+         }
+     }
+ 
+     VOID SetAssociativity(UINT32 associativity)
+     {
+         ASSERTX(associativity <= MAX_ASSOCIATIVITY);
+         _tagsLastIndex    = associativity - 1;
+         _nextReplaceIndex = _tagsLastIndex;
+     }
+     UINT32 GetAssociativity(UINT32 associativity) { return _tagsLastIndex + 1; }
+ 
+     UINT32 Find(CACHE_TAG tag)
+     {
+         bool result = true;
+ 
+         for (INT32 index = _tagsLastIndex; index >= 0; index--)
+         {
+             // this is an ugly micro-optimization, but it does cause a
+             // tighter assembly loop for ARM that way ...
+             if (_tags[index] == tag) goto end;
+         }
+         result = false;
+ 
+     end:
+         return result;
+     }
+ 
+     VOID Replace(CACHE_TAG tag)
+     {
+         // g++ -O3 too dumb to do CSE on following lines?!
+         const UINT32 index = _nextReplaceIndex;
+ 
+         _tags[index] = tag;
+         // condition typically faster than modulo
+         // std::cout<<_nextReplaceIndex<<" ";
+ 
+         _nextReplaceIndex = (index == 0 ? _tagsLastIndex : index - 1);
+     }
+ };
+ 
+ 
+ template < UINT32 MAX_ASSOCIATIVITY = 4 > class LEAST_RECENTLY_USED
+ {
+     private:
+     CACHE_COUNTER _counters[MAX_ASSOCIATIVITY];
+     CACHE_TAG _tags[MAX_ASSOCIATIVITY];
+ 
+     UINT32 _tagsLastIndex; 
+     UINT32 _nextReplaceIndex;
+ 
+   public:
+     LEAST_RECENTLY_USED(UINT32 associativity = MAX_ASSOCIATIVITY) : _tagsLastIndex(associativity - 1)
+     {
+         ASSERTX(associativity <= MAX_ASSOCIATIVITY);
+         _nextReplaceIndex = _tagsLastIndex;
+ 
+         // std::cout<<"LRU Cache Constructor called \n";
+         // std::cout<<"MAX_ASSOCIATIVITY = "<<MAX_ASSOCIATIVITY<<"\n";
+         // std::cout<<"_tagsLastIndex = "<<_tagsLastIndex<<"\n";
+ 
+         // variable for initializing the counters
+         ADDRINT counter_value = _tagsLastIndex;
+         // std::cout << "Hello 1";
+         for (INT32 index = _tagsLastIndex; index >= 0; index--)
+         {
+             _tags[index] = CACHE_TAG(0);
+             // initialize the counters |0|1|2|3|
+             _counters[index] = CACHE_COUNTER(counter_value--);
+             
+         }
+     }
+ 
+     VOID SetAssociativity(UINT32 associativity)
+     {
+         ASSERTX(associativity <= MAX_ASSOCIATIVITY);
+         _tagsLastIndex    = associativity - 1;
+         _nextReplaceIndex = _tagsLastIndex;
+     }
+     UINT32 GetAssociativity(UINT32 associativity) { return _tagsLastIndex + 1; }
+ 
+     UINT32 Find(CACHE_TAG tag)
+     {
+         bool result = true;
+         // std::cout<<"Inside the find function\n";
+ 
+         for (UINT32 index = _tagsLastIndex; index >= 0 && index <= (_tagsLastIndex); index--)
+         {
+             // this is an ugly micro-optimization, but it does cause a
+             // tighter assembly loop for ARM that way ...
+             // std::cout<<"Inside for loop before if "<<index<<"\n";
+             // if(index >= 0)
+             // {
+ 
+                 if (_tags[index] == tag) 
+                 {
+                     // std::cout<<"hit on index "<<index<<"\n";
+                     // decrement the value of the other counters 
+                     // if(_counters[index] != MAX_ASSOCIATIVITY-1)
+                     // {
+                         for(UINT32 index2 = _tagsLastIndex; index2 >= 0 && index2 <= (_tagsLastIndex); index2--)
+                         {
+                             if(index2 != index && _counters[index2].get_count() > 0 && _counters[index2].get_count() > _counters[index].get_count())
+                             {
+                                 _counters[index2].decrement();
+                                 // std::cout << "Hello 2";
+                             }
+                         }
+                     // }
+ 
+                     // maximize the counter of found index
+                     _counters[index] = CACHE_COUNTER(_tagsLastIndex);
+                     
+                     goto end;
+                 }
+             // }
+         }
+         // std::cout<<"After the for loop\n";
+         result = false;
+ 
+     end:
+         return result;
+     }
+ 
+     VOID Replace(CACHE_TAG tag)
+     {
+         // Index to be replaced
+         //const UINT32 index = _nextReplaceIndex;
+ 
+         // determine the counter with the min count value
+ 
+         // UINT32 min_counter = MAX_ASSOCIATIVITY;
+         for(UINT32 index = _tagsLastIndex; index >= 0 && index <= (_tagsLastIndex); index--)
+         {
+             if(_counters[index].get_count() ==  0)
+             {
+                 _nextReplaceIndex = index;
+                 // min_counter = _counters[index];
+                 // std::cout << "Hello 3";
+                 break;
+             }
+         }
+ 
+         // decrement the value of the other counters 
+         for(UINT32 index = _tagsLastIndex; index >= 0 && index <= (_tagsLastIndex); index--)
+         {
+             if(index != _nextReplaceIndex && _counters[index].get_count() > 0)
+             {
+                 _counters[index].decrement();
+                 // std::cout << "Hello 4";
+             }
+         }
+ 
+         _tags[_nextReplaceIndex] = tag;
+         _counters[_nextReplaceIndex] = CACHE_COUNTER(_tagsLastIndex);
+         // std::cout<<_nextReplaceIndex<<" "<<_counters[_nextReplaceIndex].get_count()<<"\n";
+         // std::cout<<_nextReplaceIndex<<" ";
+         // condition typically faster than modulo
+         // _nextReplaceIndex = (index == 0 ? _tagsLastIndex : index - 1);
+     }
+     VOID Flush()
+     {
+         for (INT32 index = _tagsLastIndex; index >= 0; index--)
+         {
+             _tags[index] = 0;
+             _counters[index] = CACHE_COUNTER(0);
+             // std::cout << "Hello 5";
+         }
+         _nextReplaceIndex = _tagsLastIndex;
+     }
+ };
+ 
+ // template< UINT32 MAX_ASSOCIATIVITY = 4 > class LEAST_RECENTLY_USED
+ // {
+ //   private:
+ //     // CACHE_TAG _tags[MAX_ASSOCIATIVITY];
+ //     UINT32 _tagsLastIndex;
+ //     // UINT32 _nextReplaceIndex;
+ 
+ //     CACHE_NODE * head = new CACHE_NODE(CACHE_TAG(-1));
+ //     CACHE_NODE * tail = new CACHE_NODE(CACHE_TAG(-1));
+ //     UINT32 set_associativity;
+ //     std::unordered_map < ADDRINT, CACHE_NODE * > m;
+ 
+ //   public:
+ //   LEAST_RECENTLY_USED(UINT32 associativity = MAX_ASSOCIATIVITY) : _tagsLastIndex(associativity - 1)
+ //     {
+ //         ASSERTX(associativity <= MAX_ASSOCIATIVITY);
+ //         set_associativity = associativity;
+ //         head -> next = tail;
+ //         tail -> prev = head;
+ //         // _nextReplaceIndex = _tagsLastIndex;
+ 
+ //         // for (INT32 index = _tagsLastIndex; index >= 0; index--)
+ //         // {
+ //         //     _tags[index] = CACHE_TAG(0);
+ //         // }
+ //     }
+ 
+ //     VOID SetAssociativity(UINT32 associativity)
+ //     {
+ //         ASSERTX(associativity <= MAX_ASSOCIATIVITY);
+ //         _tagsLastIndex    = associativity - 1;
+ //         // _nextReplaceIndex = _tagsLastIndex;
+ //         set_associativity = associativity;
+ //     }
+ //     UINT32 GetAssociativity(UINT32 associativity) { return _tagsLastIndex + 1; }
+ 
+ //     void addnode(CACHE_NODE * newnode) {
+ //         CACHE_NODE * temp = head -> next;
+ //         newnode -> next = temp;
+ //         newnode -> prev = head;
+ //         head -> next = newnode;
+ //         temp -> prev = newnode;
+ //       }
+ 
+ //       void deletenode(CACHE_NODE * delnode) {
+ //         CACHE_NODE * delprev = delnode -> prev;
+ //         CACHE_NODE * delnext = delnode -> next;
+ //         delprev -> next = delnext;
+ //         delnext -> prev = delprev;
+ //       }
+ 
+ //     UINT32 Find(CACHE_TAG tag)
+ //     {
+ //         bool result = true;
+ 
+ //     //     for (INT32 index = _tagsLastIndex; index >= 0; index--)
+ //     //     {
+ //     //         // this is an ugly micro-optimization, but it does cause a
+ //     //         // tighter assembly loop for ARM that way ...
+ //     //         if (_tags[index] == tag) goto end;
+ //     //     }
+ //     //     result = false;
+ //     // end:
+ 
+ //     if (m.find(tag.value()) != m.end()) 
+ //     {
+ //         CACHE_NODE * resnode = m[tag];
+ //         // int res = resnode -> tag_obj;
+ //         m.erase(tag.value());
+ //         deletenode(resnode);
+ //         addnode(resnode);
+ //         m[tag.value()] = head -> next;
+ //         return result;
+ //       }
+ //         result = false;
+ //         return result;
+ //     }
+ 
+ //     VOID Replace(CACHE_TAG tag)
+ //     {
+ //         // // g++ -O3 too dumb to do CSE on following lines?!
+ //         // const UINT32 index = _nextReplaceIndex;
+ 
+ //         // _tags[index] = tag;
+ //         // // condition typically faster than modulo
+ //         // _nextReplaceIndex = (index == 0 ? _tagsLastIndex : index - 1);
+ //         // if (m.find(tag) != m.end()) {
+ //         //     CACHE_NODE * existingnode = m[tag];
+ //         //     m.erase(tag);
+ //         //     deletenode(existingnode);
+ //         //   }
+ //         if (m.size() == set_associativity) 
+ //         {
+ //             m.erase(tail -> prev -> tag_obj.value());
+ //             CACHE_NODE * ptr = tail->prev;
+ //             deletenode(tail -> prev);
+ //             delete ptr;
+ //         } 
+       
+ //         addnode(new CACHE_NODE(tag));
+ //         m[tag.value()] = head -> next;
+ //     }
+ //     VOID Flush()
+ //     {
+ //         // for (INT32 index = _tagsLastIndex; index >= 0; index--)
+ //         // {
+ //         //     _tags[index] = 0;
+ //         // }
+ //         // _nextReplaceIndex = _tagsLastIndex;
+ //     }
+ // };
+ 
+ 
+ } // namespace CACHE_SET
+ 
+ namespace CACHE_ALLOC
+ {
+ typedef enum
+ {
+     STORE_ALLOCATE,
+     STORE_NO_ALLOCATE
+ } STORE_ALLOCATION;
+ }
+ 
+ /*!
+  *  @brief Generic cache base class; no allocate specialization, no cache set specialization
+  */
+ class CACHE_BASE
+ {
+   public:
+     // types, constants
+     typedef enum
+     {
+         ACCESS_TYPE_LOAD,
+         ACCESS_TYPE_STORE,
+         ACCESS_TYPE_NUM
+     } ACCESS_TYPE;
+ 
+     typedef enum
+     {
+         CACHE_TYPE_ICACHE,
+         CACHE_TYPE_DCACHE,
+         CACHE_TYPE_NUM
+     } CACHE_TYPE;
+ 
+   protected:
+     static const UINT32 HIT_MISS_NUM = 2;
+     CACHE_STATS _access[ACCESS_TYPE_NUM][HIT_MISS_NUM];
+ 
+   private: // input params
+     const std::string _name;
+     const UINT32 _cacheSize;
+     const UINT32 _lineSize;
+     const UINT32 _associativity;
+ 
+     // computed params
+     const UINT32 _lineShift;
+     const UINT32 _setIndexMask;
+ 
+     CACHE_STATS SumAccess(bool hit) const
+     {
+         CACHE_STATS sum = 0;
+ 
+         for (UINT32 accessType = 0; accessType < ACCESS_TYPE_NUM; accessType++)
+         {
+             sum += _access[accessType][hit];
+         }
+ 
+         return sum;
+     }
+ 
+   protected:
+     UINT32 NumSets() const { return _setIndexMask + 1; }
+ 
+   public:
+     // constructors/destructors
+     CACHE_BASE(std::string name, UINT32 cacheSize, UINT32 lineSize, UINT32 associativity);
+ 
+     // accessors
+     UINT32 CacheSize() const { return _cacheSize; }
+     UINT32 LineSize() const { return _lineSize; }
+     UINT32 Associativity() const { return _associativity; }
+     //
+     CACHE_STATS Hits(ACCESS_TYPE accessType) const { return _access[accessType][true]; }
+     CACHE_STATS Misses(ACCESS_TYPE accessType) const { return _access[accessType][false]; }
+     CACHE_STATS Accesses(ACCESS_TYPE accessType) const { return Hits(accessType) + Misses(accessType); }
+     CACHE_STATS Hits() const { return SumAccess(true); }
+     CACHE_STATS Misses() const { return SumAccess(false); }
+     CACHE_STATS Accesses() const { return Hits() + Misses(); }
+ 
+     VOID SplitAddress(const ADDRINT addr, CACHE_TAG& tag, UINT32& setIndex) const
+     {
+         tag      = addr >> _lineShift;
+         setIndex = tag & _setIndexMask;
+     }
+ 
+     VOID SplitAddress(const ADDRINT addr, CACHE_TAG& tag, UINT32& setIndex, UINT32& lineIndex) const
+     {
+         const UINT32 lineMask = _lineSize - 1;
+         lineIndex             = addr & lineMask;
+         SplitAddress(addr, tag, setIndex);
+     }
+ 
+     string StatsLong(string prefix = "", CACHE_TYPE = CACHE_TYPE_DCACHE) const;
+ };
+ 
+ CACHE_BASE::CACHE_BASE(std::string name, UINT32 cacheSize, UINT32 lineSize, UINT32 associativity)
+     : _name(name), _cacheSize(cacheSize), _lineSize(lineSize), _associativity(associativity), _lineShift(FloorLog2(lineSize)),
+       _setIndexMask((cacheSize / (associativity * lineSize)) - 1)
+ {
+     ASSERTX(IsPower2(_lineSize));
+     ASSERTX(IsPower2(_setIndexMask + 1));
+ 
+     for (UINT32 accessType = 0; accessType < ACCESS_TYPE_NUM; accessType++)
+     {
+         _access[accessType][false] = 0;
+         _access[accessType][true]  = 0;
+     }
+ }
+ 
+ /*!
+  *  @brief Stats output method
+  */
+ 
+ string CACHE_BASE::StatsLong(string prefix, CACHE_TYPE cache_type) const
+ {
+     const UINT32 headerWidth = 19;
+     const UINT32 numberWidth = 12;
+ 
+     string out;
+ 
+     out += prefix + _name + ":" + "\n";
+ 
+     if (cache_type != CACHE_TYPE_ICACHE)
+     {
+         for (UINT32 i = 0; i < ACCESS_TYPE_NUM; i++)
+         {
+             const ACCESS_TYPE accessType = ACCESS_TYPE(i);
+ 
+             std::string type(accessType == ACCESS_TYPE_LOAD ? "Load" : "Store");
+ 
+             out += prefix + ljstr(type + "-Hits:      ", headerWidth) + mydecstr(Hits(accessType), numberWidth) + "  " +
+                    fltstr(100.0 * Hits(accessType) / Accesses(accessType), 2, 6) + "%\n";
+ 
+             out += prefix + ljstr(type + "-Misses:    ", headerWidth) + mydecstr(Misses(accessType), numberWidth) + "  " +
+                    fltstr(100.0 * Misses(accessType) / Accesses(accessType), 2, 6) + "%\n";
+ 
+             out += prefix + ljstr(type + "-Accesses:  ", headerWidth) + mydecstr(Accesses(accessType), numberWidth) + "  " +
+                    fltstr(100.0 * Accesses(accessType) / Accesses(accessType), 2, 6) + "%\n";
+ 
+             out += prefix + "\n";
+         }
+     }
+ 
+     out += prefix + ljstr("Total-Hits:      ", headerWidth) + mydecstr(Hits(), numberWidth) + "  " +
+            fltstr(100.0 * Hits() / Accesses(), 2, 6) + "%\n";
+ 
+     out += prefix + ljstr("Total-Misses:    ", headerWidth) + mydecstr(Misses(), numberWidth) + "  " +
+            fltstr(100.0 * Misses() / Accesses(), 2, 6) + "%\n";
+ 
+     out += prefix + ljstr("Total-Accesses:  ", headerWidth) + mydecstr(Accesses(), numberWidth) + "  " +
+            fltstr(100.0 * Accesses() / Accesses(), 2, 6) + "%\n";
+     out += "\n";
+ 
+     return out;
+ }
+ 
+ /*!
+  *  @brief Templated cache class with specific cache set allocation policies
+  *
+  *  All that remains to be done here is allocate and deallocate the right
+  *  type of cache sets.
+  */
+ template< class SET, UINT32 MAX_SETS, UINT32 STORE_ALLOCATION > class CACHE : public CACHE_BASE
+ {
+   private:
+     SET _sets[MAX_SETS];
+ 
+   public:
+     // constructors/destructors
+     CACHE(std::string name, UINT32 cacheSize, UINT32 lineSize, UINT32 associativity)
+         : CACHE_BASE(name, cacheSize, lineSize, associativity)
+     {
+         ASSERTX(NumSets() <= MAX_SETS);
+ 
+         for (UINT32 i = 0; i < NumSets(); i++)
+         {
+             _sets[i].SetAssociativity(associativity);
+         }
+         // std::cout<<"cacheSize = "<<cacheSize<<"\n";
+         // std::cout<<"lineSize = "<<lineSize<<"\n";
+         // std::cout<<"associativity = "<<associativity<<"\n";
+         // std::cout<<"MAX_SETS = "<<MAX_SETS<<"\n";
+     }
+ 
+     // modifiers
+     /// Cache access from addr to addr+size-1
+     bool Access(ADDRINT addr, UINT32 size, ACCESS_TYPE accessType);
+     /// Cache access at addr that does not span cache lines
+     bool AccessSingleLine(ADDRINT addr, ACCESS_TYPE accessType);
+ };
+ 
+ /*!
+  *  @return true if all accessed cache lines hit
+  */
+ 
+ template< class SET, UINT32 MAX_SETS, UINT32 STORE_ALLOCATION >
+ bool CACHE< SET, MAX_SETS, STORE_ALLOCATION >::Access(ADDRINT addr, UINT32 size, ACCESS_TYPE accessType)
+ {
+     // std::cout<<"Access Function called \n";
+     const ADDRINT highAddr = addr + size;
+     bool allHit            = true;
+ 
+     const ADDRINT lineSize    = LineSize();
+     const ADDRINT notLineMask = ~(lineSize - 1);
+     do
+     {
+         CACHE_TAG tag;
+         UINT32 setIndex;
+ 
+         SplitAddress(addr, tag, setIndex);
+ 
+         SET& set = _sets[setIndex];
+ 
+         bool localHit = set.Find(tag);
+         allHit &= localHit;
+         // std::cout<<"Find called for set "<<setIndex<<"\n";
+ 
+ 
+         // on miss, loads always allocate, stores optionally
+         if ((!localHit) && (accessType == ACCESS_TYPE_LOAD || STORE_ALLOCATION == CACHE_ALLOC::STORE_ALLOCATE))
+         {
+             // std::cout<<"Replace called for set "<<setIndex<<"\n";
+             set.Replace(tag);
+         }
+ 
+         addr = (addr & notLineMask) + lineSize; // start of next cache line
+     }
+     while (addr < highAddr);
+ 
+     _access[accessType][allHit]++;
+     // std::cout<<"Find called for set\n";
+ 
+     return allHit;
+ }
+ 
+ /*!
+  *  @return true if accessed cache line hits
+  */
+ template< class SET, UINT32 MAX_SETS, UINT32 STORE_ALLOCATION >
+ bool CACHE< SET, MAX_SETS, STORE_ALLOCATION >::AccessSingleLine(ADDRINT addr, ACCESS_TYPE accessType)
+ {
+     // std::cout<<"AccessSingleLine Function called \n";
+     CACHE_TAG tag;
+     UINT32 setIndex;
+ 
+     SplitAddress(addr, tag, setIndex);
+ 
+     SET& set = _sets[setIndex];
+     // std::cout<<"Find called for set "<<setIndex<<"\n";
+ 
+     bool hit = set.Find(tag);
+ 
+     // on miss, loads always allocate, stores optionally
+     if ((!hit) && (accessType == ACCESS_TYPE_LOAD || STORE_ALLOCATION == CACHE_ALLOC::STORE_ALLOCATE))
+     {
+         // std::cout<<"Replace called for set "<<setIndex<<"\n";
+         set.Replace(tag);
+     }
+ 
+     _access[accessType][hit]++;
+ 
+     return hit;
+ }
+ 
+ // define shortcuts
+ #define CACHE_DIRECT_MAPPED(MAX_SETS, ALLOCATION) CACHE< CACHE_SET::DIRECT_MAPPED, MAX_SETS, ALLOCATION >
+ #define CACHE_ROUND_ROBIN(MAX_SETS, MAX_ASSOCIATIVITY, ALLOCATION) \
+     CACHE< CACHE_SET::ROUND_ROBIN< MAX_ASSOCIATIVITY >, MAX_SETS, ALLOCATION >
+ #define CACHE_LEAST_RECENTLY_USED(MAX_SETS, MAX_ASSOCIATIVITY, ALLOCATION) \
+     CACHE< CACHE_SET::LEAST_RECENTLY_USED< MAX_ASSOCIATIVITY >, MAX_SETS, ALLOCATION >
+ 
+ 
+ #endif // PIN_CACHE_H

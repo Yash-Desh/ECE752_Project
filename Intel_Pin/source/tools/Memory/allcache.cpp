@@ -10,6 +10,7 @@
 
 #include <iostream>
 #include <fstream>
+
 #include "pin.H"
 
 typedef UINT32 CACHE_STATS; // type of cache hit/miss counters
@@ -90,6 +91,9 @@ typedef CACHE_DIRECT_MAPPED(max_sets, allocation) CACHE;
 } // namespace UL2
 static UL2::CACHE ul2("L2 Unified Cache", UL2::cacheSize, UL2::lineSize, UL2::associativity);
 
+// Define Data-Store for V-way cache
+DATA data_array (UL2::cacheSize, UL2::lineSize);
+
 namespace UL3
 {
 // 3rd level unified cache: 16 MB, 64 B lines, direct mapped
@@ -100,7 +104,8 @@ const CACHE_ALLOC::STORE_ALLOCATION allocation = CACHE_ALLOC::STORE_ALLOCATE;
 
 const UINT32 max_sets = cacheSize / (lineSize * associativity);
 
-typedef CACHE_DIRECT_MAPPED(max_sets, allocation) CACHE;
+// typedef CACHE_DIRECT_MAPPED(max_sets, allocation) CACHE;
+typedef CACHE_LEAST_RECENTLY_USED(max_sets, associativity, allocation) CACHE;
 } // namespace UL3
 static UL3::CACHE ul3("L3 Unified Cache", UL3::cacheSize, UL3::lineSize, UL3::associativity);
 
