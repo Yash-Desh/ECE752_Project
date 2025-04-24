@@ -54,12 +54,12 @@ typedef CACHE_LEAST_RECENTLY_USED(max_sets, associativity, allocation) CACHE;
  
  // typedef CACHE_DIRECT_MAPPED(max_sets, allocation) CACHE;
  // typedef CACHE_ROUND_ROBIN(max_sets, associativity, allocation) CACHE;
- //typedef CACHE_LEAST_RECENTLY_USED(max_sets, associativity, allocation) CACHE;
+ typedef CACHE_LEAST_RECENTLY_USED(max_sets, associativity, allocation) CACHE;
  // typedef CACHE_VARIABLE_WAY(max_sets, associativity, allocation) CACHE;
  
  } // namespace UL2
- VWAY_CACHE ul2("L2 Unified Cache", UL2::cacheSize, UL2::lineSize, UL2::associativity);
-//static UL2::CACHE ul2("L2 Unified Cache", UL2::cacheSize, UL2::lineSize, UL2::associativity);
+//VWAY_CACHE ul2("L2 Unified Cache", UL2::cacheSize, UL2::lineSize, UL2::associativity);
+static UL2::CACHE ul2("L2 Unified Cache", UL2::cacheSize, UL2::lineSize, UL2::associativity);
  
 //  // Define Data-Store
 DATA data_array (UL2::cacheSize, UL2::lineSize);
@@ -96,7 +96,7 @@ DATA data_array (UL2::cacheSize, UL2::lineSize);
     // Generate timestamped filename with BASELRU prefix
     time_t now = time(nullptr);
     char filename[80];  // Increased size to accommodate the prefix
-    strftime(filename, sizeof(filename), "VWAY_L2-%Y-%m-%d_%H-%M-%S.out", localtime(&now));
+    strftime(filename, sizeof(filename), "LRU_L2-%Y-%m-%d_%H-%M-%S.out", localtime(&now));
  
     // Open file and dump stats
     std::ofstream out(filename);

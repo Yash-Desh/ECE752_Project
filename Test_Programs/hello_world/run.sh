@@ -1,7 +1,7 @@
 #!/bin/bash
 
 ###### Parameters #####
-pin_tool=mycache_L1
+pin_tool=mycache
 benchmark=hello_world
 # No data/all folder
 #######################

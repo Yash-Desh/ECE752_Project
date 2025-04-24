@@ -1,27 +1,75 @@
 PIN:MEMLATENCIES 1.0. 0x0
 #
+# L1 Instruction Cache stats
+# IL1 Cache Size           : 16384
+# IL1 Line Size            : 64
+# IL1 Associativity        : 2
+# IL1 Replacement Policy   : LRU
+#
 # L1 Data Cache stats
-# DL1 Cache Size           : 32768
-# DL1 Line Size            : 32
-# DL1 Associativity        : 4
+# DL1 Cache Size           : 16384
+# DL1 Line Size            : 64
+# DL1 Associativity        : 2
 # DL1 Replacement Policy   : LRU
+#
+# L2 Unified Cache stats
+# UL2 Cache Size           : 262144
+# UL2 Line Size            : 64
+# UL2 Associativity        : 4
+# UL2 Replacement Policy   : LRU
 
 ####################################################################
+L1 Instruction Cache:
+   Load Hits:         2278069
+   Load Misses:          2245
+   Load Accesses:     2280314
+   Load Miss Rate:      0.10%
+
+  Store Hits:               0
+  Store Misses:             0
+  Store Accesses:           0
+  Store Miss Rate:       nan%
+
+  Total Hits:         2278069
+  Total Misses:          2245
+  Total Accesses:     2280314
+  Total Miss Rate:      0.10%
+  Flushes:                  0
+  Stat Resets:              0
+
+L1 Data Cache:
+   Load Hits:          486110
+   Load Misses:         17316
+   Load Accesses:      503426
+   Load Miss Rate:      3.44%
+
+  Store Hits:          164170
+  Store Misses:          2941
+  Store Accesses:      167111
+  Store Miss Rate:      1.76%
+
+  Total Hits:          650280
+  Total Misses:         20257
+  Total Accesses:      670537
+  Total Miss Rate:      3.02%
+  Flushes:                  0
+  Stat Resets:              0
+
 L2 Unified Cache:
-   Load Hits:          438891
-   Load Misses:         19919
-   Load Accesses:      458810
-   Load Miss Rate:      4.34%
+   Load Hits:            8253
+   Load Misses:         11308
+   Load Accesses:       19561
+   Load Miss Rate:     57.81%
 
-  Store Hits:          151215
-  Store Misses:          3969
-  Store Accesses:      155184
-  Store Miss Rate:      2.56%
+  Store Hits:            1194
+  Store Misses:          1747
+  Store Accesses:        2941
+  Store Miss Rate:     59.40%
 
-  Total Hits:          590106
-  Total Misses:         23888
-  Total Accesses:      613994
-  Total Miss Rate:      3.89%
+  Total Hits:            9447
+  Total Misses:         13055
+  Total Accesses:       22502
+  Total Miss Rate:     58.02%
   Flushes:                  0
   Stat Resets:              0
 

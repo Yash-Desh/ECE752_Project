@@ -806,7 +806,7 @@ bool CACHE< SET, MAX_SETS, STORE_ALLOCATION >::Access(ADDRINT addr, UINT32 size,
          if(setIndex == 25)
          {
             std::cout<<"Memory Access at address: "<<addr<<", tag:"<<tag<<", setIndex:"<<setIndex<<"\n";
-            set.debug_replacement_policy();
+            //set.debug_replacement_policy();
          }
 
         addr = (addr & notLineMask) + lineSize; // start of next cache line
@@ -849,7 +849,7 @@ bool CACHE< SET, MAX_SETS, STORE_ALLOCATION >::AccessSingleLine(ADDRINT addr, AC
     if(setIndex == 25)
     {
        std::cout<<"Memory Access at address: "<<addr<<", tag:"<<tag<<", setIndex:"<<setIndex<<"\n";
-       set.debug_replacement_policy();
+       //set.debug_replacement_policy();
     }
 
     _access[accessType][hit]++;
