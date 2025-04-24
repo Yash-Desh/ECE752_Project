@@ -957,18 +957,22 @@ class VWAY_CACHE : public CACHE_BASE
                  if(set_data[victim_set_index].current_associativity > 0)
                 {
                     // update the counters in the victim set
-                    for(UINT32 index=0; index < set_data[victim_set_index].current_associativity; index++)
+                    for(UINT32 index=0; index < set_data[victim_set_index].max_associativity; index++)
                     {
-                        if(index > victim_way)
+                        // update only if counter value is greater than the victim & the way is valid
+                        if(tag_stores[victim_set_index][index].isValid() && tag_stores[victim_set_index][victim_way].get_count() < tag_stores[victim_set_index][index].get_count())
                         {
-                            tag_stores[set_index][index].decrement_count();
+                            tag_stores[victim_set_index][index].decrement_count();
                         }
                     }
-                    tag_stores[set_index][victim_way].set_count(set_data[set_index].current_associativity-1);
+                    tag_stores[victim_set_index][victim_way].set_count(set_data[victim_set_index].current_associativity-1);
 
                     set_data[victim_set_index].current_associativity--;
                     if(victim_set_index == 25)
-                    std::cout<<"Set Index = "<<victim_set_index<<", victim_way = "<<victim_way<<", current_associativity = "<<set_data[victim_set_index].current_associativity<<"\n";// <<std::flush;
+                    {
+                        std::cout<<"Set Index = "<<victim_set_index<<", victim_way = "<<victim_way<<", current_associativity = "<<set_data[victim_set_index].current_associativity<<"\n";// <<std::flush;
+                        debug_replacement_policy(victim_set_index);
+                    }
                 }
              }
             //  if(set_index == 25)
@@ -1048,11 +1052,11 @@ bool VWAY_CACHE::Access(ADDRINT addr, UINT32 size, ACCESS_TYPE accessType)
          SplitAddress(addr, tag, setIndex);
  
          //SET& set = _sets[setIndex];
-         if(setIndex == 25)
-         {
-            std::cout<<"Memory Access at address: "<<addr<<", tag:"<<tag<<", setIndex:"<<setIndex<<", current_set_associativity:"<<set_data[setIndex].current_associativity<<"\n";
-            debug_replacement_policy(setIndex);
-         }
+        //  if(setIndex == 25)
+        //  {
+        //     std::cout<<"Memory Access at address: "<<addr<<", tag:"<<tag<<", setIndex:"<<setIndex<<", current_set_associativity:"<<set_data[setIndex].current_associativity<<"\n";
+        //     debug_replacement_policy(setIndex);
+        //  }
  
          bool localHit = Find(tag, setIndex);
          allHit &= localHit;
