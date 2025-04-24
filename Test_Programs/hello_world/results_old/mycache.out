@@ -1,0 +1,58 @@
+PIN:MEMLATENCIES 1.0. 0x0
+#
+# DCACHE stats
+#
+L1 Instruction Cache:
+   Load Hits:         1758385
+   Load Misses:          3365
+   Load Accesses:     1761750
+   Load Miss Rate:      0.19%
+
+  Store Hits:               0
+  Store Misses:             0
+  Store Accesses:           0
+  Store Miss Rate:       nan%
+
+  Total Hits:         1758385
+  Total Misses:          3365
+  Total Accesses:     1761750
+  Total Miss Rate:      0.19%
+  Flushes:                  0
+  Stat Resets:              0
+
+L1 Data Cache:
+   Load Hits:          439259
+   Load Misses:         19551
+   Load Accesses:      458810
+   Load Miss Rate:      4.26%
+
+  Store Hits:          144604
+  Store Misses:         10580
+  Store Accesses:      155184
+  Store Miss Rate:      6.82%
+
+  Total Hits:          583863
+  Total Misses:         30131
+  Total Accesses:      613994
+  Total Miss Rate:      4.91%
+  Flushes:                  0
+  Stat Resets:              0
+
+L2 Unified Cache:
+   Load Hits:           13318
+   Load Misses:          9598
+   Load Accesses:       22916
+   Load Miss Rate:     41.88%
+
+  Store Hits:            9143
+  Store Misses:          1437
+  Store Accesses:       10580
+  Store Miss Rate:     13.58%
+
+  Total Hits:           22461
+  Total Misses:         11035
+  Total Accesses:       33496
+  Total Miss Rate:     32.94%
+  Flushes:                  0
+  Stat Resets:              0
+

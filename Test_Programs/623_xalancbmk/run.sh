@@ -14,4 +14,4 @@ echo "Calling make in Memory Folder"
 make
 cd ../../../../Test_Programs/$benchmark/
 echo "Executing Pin Progam" 
-../../Intel_Pin/pin -t ../../Intel_Pin/source/tools/Memory/obj-intel64/$pin_tool.so -- ./xalancbmk_s_base.mytest-m64 allbooks.xml xalanc.xsl > $benchmark.log
+time ../../Intel_Pin/pin -t ../../Intel_Pin/source/tools/Memory/obj-intel64/$pin_tool.so -- ./xalancbmk_s_base.mytest-m64 allbooks.xml xalanc.xsl | tee $benchmark.log

@@ -1,0 +1,78 @@
+PIN:MEMLATENCIES 1.0. 0x0
+#
+# L1 Instruction Cache stats
+# IL1 Cache Size           : 16384
+# IL1 Line Size            : 64
+# IL1 Associativity        : 2
+# IL1 Replacement Policy   : LRU
+#
+# L1 Data Cache stats
+# DL1 Cache Size           : 16384
+# DL1 Line Size            : 64
+# DL1 Associativity        : 2
+# DL1 Replacement Policy   : LRU
+#
+# L2 Unified Cache stats
+# UL2 Cache Size           : 262144
+# UL2 Line Size            : 128
+# UL2 Associativity        : 8
+# UL2 Replacement Policy   : LRU
+
+####################################################################
+L1 Instruction Cache:
+   Load Hits:      15808553337
+   Load Misses:     117803935
+   Load Accesses:  15926357272
+   Load Miss Rate:      0.74%
+
+  Store Hits:               0
+  Store Misses:             0
+  Store Accesses:           0
+  Store Miss Rate:       nan%
+
+  Total Hits:      15808553337
+  Total Misses:     117803935
+  Total Accesses:  15926357272
+  Total Miss Rate:      0.74%
+  Flushes:                  0
+  Stat Resets:              0
+
+L1 Data Cache:
+   Load Hits:      3685572598
+   Load Misses:     136265957
+   Load Accesses:  3821838555
+   Load Miss Rate:      3.57%
+
+  Store Hits:      1149396741
+  Store Misses:    1221688374
+  Store Accesses:  2371085115
+  Store Miss Rate:     51.52%
+
+  Total Hits:      4834969339
+  Total Misses:    1357954331
+  Total Accesses:  6192923670
+  Total Miss Rate:     21.93%
+  Flushes:                  0
+  Stat Resets:              0
+
+L2 Unified Cache:
+   Load Hits:       234775834
+   Load Misses:      19294058
+   Load Accesses:   254069892
+   Load Miss Rate:      7.59%
+
+  Store Hits:      1205517920
+  Store Misses:      16170454
+  Store Accesses:  1221688374
+  Store Miss Rate:      1.32%
+
+  Total Hits:      1440293754
+  Total Misses:      35464512
+  Total Accesses:  1475758266
+  Total Miss Rate:      2.40%
+  Flushes:                  0
+  Stat Resets:              0
+
+real    4m27.378s
+user    4m25.468s
+sys     0m1.021s

@@ -1,0 +1,29 @@
+#
+# DCACHE stats with L2 and LRU replacement:
+#
+# L1 Data Cache:
+# Load-Hits:           3753334129   97.91%
+# Load-Misses:           80207576    2.09%
+# Load-Accesses:       3833541705  100.00%
+# 
+# Store-Hits:          2362930979   96.93%
+# Store-Misses:          74878442    3.07%
+# Store-Accesses:      2437809421  100.00%
+# 
+# Total-Hits:          6116265108   97.53%
+# Total-Misses:         155086018    2.47%
+# Total-Accesses:      6271351126  100.00%
+
+# L2 L2 Cache:
+# L2 Load-Hits:             22147273   27.61%
+# L2 Load-Misses:           58060303   72.39%
+# L2 Load-Accesses:         80207576  100.00%
+# L2 
+# L2 Store-Hits:            12702952   16.96%
+# L2 Store-Misses:          62175490   83.04%
+# L2 Store-Accesses:        74878442  100.00%
+# L2 
+# L2 Total-Hits:            34850225   22.47%
+# L2 Total-Misses:         120235793   77.53%
+# L2 Total-Accesses:       155086018  100.00%
+

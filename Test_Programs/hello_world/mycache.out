@@ -1,0 +1,27 @@
+PIN:MEMLATENCIES 1.0. 0x0
+#
+# L1 Data Cache stats
+# DL1 Cache Size           : 32768
+# DL1 Line Size            : 32
+# DL1 Associativity        : 4
+# DL1 Replacement Policy   : LRU
+
+####################################################################
+L2 Unified Cache:
+   Load Hits:          438891
+   Load Misses:         19919
+   Load Accesses:      458810
+   Load Miss Rate:      4.34%
+
+  Store Hits:          151215
+  Store Misses:          3969
+  Store Accesses:      155184
+  Store Miss Rate:      2.56%
+
+  Total Hits:          590106
+  Total Misses:         23888
+  Total Accesses:      613994
+  Total Miss Rate:      3.89%
+  Flushes:                  0
+  Stat Resets:              0
+

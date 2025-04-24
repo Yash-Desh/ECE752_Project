@@ -1,0 +1,78 @@
+PIN:MEMLATENCIES 1.0. 0x0
+#
+# L1 Instruction Cache stats
+# IL1 Cache Size           : 16384
+# IL1 Line Size            : 64
+# IL1 Associativity        : 2
+# IL1 Replacement Policy   : LRU
+#
+# L1 Data Cache stats
+# DL1 Cache Size           : 16384
+# DL1 Line Size            : 64
+# DL1 Associativity        : 2
+# DL1 Replacement Policy   : LRU
+#
+# L2 Unified Cache stats
+# UL2 Cache Size           : 262144
+# UL2 Line Size            : 64
+# UL2 Associativity        : 8
+# UL2 Replacement Policy   : VWAY
+
+####################################################################
+L1 Instruction Cache:
+   Load Hits:      15808553383
+   Load Misses:     117803914
+   Load Accesses:  15926357297
+   Load Miss Rate:      0.74%
+
+  Store Hits:               0
+  Store Misses:             0
+  Store Accesses:           0
+  Store Miss Rate:       nan%
+
+  Total Hits:      15808553383
+  Total Misses:     117803914
+  Total Accesses:  15926357297
+  Total Miss Rate:      0.74%
+  Flushes:                  0
+  Stat Resets:              0
+
+L1 Data Cache:
+   Load Hits:      3699807139
+   Load Misses:     122031421
+   Load Accesses:  3821838560
+   Load Miss Rate:      3.19%
+
+  Store Hits:      1158165838
+  Store Misses:    1212919280
+  Store Accesses:  2371085118
+  Store Miss Rate:     51.15%
+
+  Total Hits:      4857972977
+  Total Misses:    1334950701
+  Total Accesses:  6192923678
+  Total Miss Rate:     21.56%
+  Flushes:                  0
+  Stat Resets:              0
+
+L2 Unified Cache:
+   Load Hits:       193050996
+   Load Misses:      46784339
+   Load Accesses:   239835335
+   Load Miss Rate:     19.51%
+
+  Store Hits:      1178706120
+  Store Misses:      34213160
+  Store Accesses:  1212919280
+  Store Miss Rate:      2.82%
+
+  Total Hits:      1371757116
+  Total Misses:      80997499
+  Total Accesses:  1452754615
+  Total Miss Rate:      5.58%
+  Flushes:                  0
+  Stat Resets:              0
+
+real    4m11.009s
+user    4m8.332s
+sys     0m1.107s
