@@ -99,6 +99,135 @@
      UINT64 get_count(){return _counter;}
      operator UINT64() const { return _counter; }
  };
+
+
+
+ class CACHE_METADATA
+ {
+     private:
+     CACHE_TAG _tag;
+     UINT64 _counter;
+     UINT32 _valid;
+     UINT64 _FPTR;
+ 
+   public:
+     CACHE_METADATA(UINT64 counter = 0) 
+     {
+        // std::cout<<"In cache Metadata \n";
+         _tag = CACHE_TAG(0);
+         _counter = counter; 
+         _valid = 0;
+         _FPTR = 0;
+        //  std::cout<<"Exiting cache Metadata \n";
+     }
+ 
+     // bool operator==(const CACHE_METADATA& right) const { return _counter == right._counter; }
+     // bool operator--() const { return _counter-1; }
+ 
+     void decrement_count(){
+        if(_counter > 0)
+            _counter -= 1;
+    }
+     UINT64 get_count(){return _counter;}
+     void set_count(UINT64 counter){_counter = counter;}
+ 
+     bool isValid(){return _valid;}
+     void toggleValid(){_valid = ~_valid;}
+ 
+     void set_FPTR(UINT64 FPTR){_FPTR = FPTR;}
+     UINT64 get_FPTR(){return _FPTR;}
+ 
+     CACHE_TAG get_tag(){return _tag;}
+     void set_tag(CACHE_TAG tag){_tag = tag; }
+ 
+     // operator UINT64() const { return _counter; }
+ };
+ 
+ class SET_METADATA{
+    public:
+        UINT32 max_associativity;
+        UINT32 current_associativity;
+        UINT32 user_associativity;
+        UINT32 TDR;
+
+        SET_METADATA(UINT32 _user_associativity = 1)
+        {
+           //  std::cout<<"In Set Metdata \n";
+            user_associativity = _user_associativity;
+            current_associativity = 0;      
+            TDR = 2;  
+            max_associativity = TDR*user_associativity;
+            
+           //  std::cout<<"Exiting Set Metdata \n";
+        }
+        void SetAssociativity(UINT32 associativity)
+        {
+            //ASSERTX(associativity <= MAX_ASSOCIATIVITY);
+            user_associativity = associativity;
+            current_associativity = 0;        
+            max_associativity = TDR*user_associativity;
+        }
+
+};
+
+
+
+ class DATA_METADATA{
+     private:
+     UINT32 _valid;
+     UINT64 _RPTR;
+     UINT64 _reuse_counter;
+ 
+     public:
+     DATA_METADATA(){
+         _valid = 0;
+         _reuse_counter = 0;
+         _RPTR = -1;
+     }
+     bool isValid(){return _valid;}
+     void toggleValid(){_valid = ~_valid;}
+ 
+
+     void set_RPTR(UINT64 FPTR){_RPTR = FPTR;}
+     UINT64 get_RPTR(){return _RPTR;}
+ 
+     UINT64 get_reuse_counter(){return _reuse_counter;}
+     void set_reuse_counter(UINT64 reuse_counter){_reuse_counter = reuse_counter;}
+     void increment_reuse_counter()
+     {   
+         if(_reuse_counter < 4)
+             _reuse_counter++;
+     }
+     void decrement_reuse_counter()
+     {
+         if(_reuse_counter > 0)
+             _reuse_counter--;
+     }
+ 
+ };
+ 
+ // extern UINT64 PTR;
+ // extern DATA_METADATA _data_store;
+ 
+ 
+ class DATA 
+ {
+     public:
+     DATA_METADATA *_data_store;
+     UINT64 PTR;
+     UINT64 data_store_size;
+ 
+     DATA(UINT32 cacheSize, UINT32 lineSize)
+     {
+        data_store_size = cacheSize/lineSize;
+         _data_store = new DATA_METADATA[data_store_size];
+         PTR = 0;
+     }
+ 
+ };
+ 
+ extern DATA data_array;
+ 
  
  
  /*!
@@ -551,7 +680,7 @@
          // on miss, loads always allocate, stores optionally
          if ((!localHit) && (accessType == ACCESS_TYPE_LOAD || STORE_ALLOCATION == CACHE_ALLOC::STORE_ALLOCATE))
          {
-             set.Replace(tag);
+             set.Replace(tag, 1);
          }
  
          addr = (addr & notLineMask) + lineSize; // start of next cache line
@@ -702,7 +831,7 @@ inline void update_duel(UINT32 setIdx, bool miss, bool tookHigh)
      // on miss, loads always allocate, stores optionally
      if ((!hit) && (accessType == ACCESS_TYPE_LOAD || STORE_ALLOCATION == CACHE_ALLOC::STORE_ALLOCATE))
      {
-         set.Replace(tag);
+         set.Replace(tag, 1);
      }
  
      _access[accessType][hit]++;
@@ -733,6 +862,416 @@ inline void update_duel(UINT32 setIdx, bool miss, bool tookHigh)
      }
      IncResetCounter();
  }
+
+
+
+//  template< UINT32 MAX_ASSOCIATIVITY, UINT32 MAX_SETS, UINT32 STORE_ALLOCATION> class VWAY_CACHE : public CACHE_BASE
+class VWAY_EAF_CACHE : public CACHE_BASE
+{
+   private:
+    //  CACHE_METADATA tag_stores[MAX_SETS][MAX_ASSOCIATIVITY];
+    // //  CACHE_METADATA tag_stores[MAX_SETS];
+    //  SET_METADATA set_data[MAX_SETS];
+    //  UINT32 victim_index;
+
+    CACHE_METADATA ** tag_stores;
+    SET_METADATA* set_data;
+    UINT32 victim_index;
+    UINT32 STORE_ALLOCATION;
+ 
+   public:
+     // constructors/destructors
+     VWAY_EAF_CACHE(std::string name, UINT32 cacheSize, UINT32 lineSize, UINT32 associativity)
+         : CACHE_BASE(name, cacheSize, lineSize, associativity)
+     {
+        // std::cout<<"Entering the VWAY constructor\n";
+        //  ASSERTX(NumSets() <= MAX_SETS);
+        // std::cout<<
+
+        UINT32 num_sets = cacheSize/ (lineSize* associativity);
+        set_data = new SET_METADATA[num_sets];
+        tag_stores = new CACHE_METADATA *[num_sets];
+        // std::cout<<"for-loop to create "<<num_sets<<"sets\n";
+        for(UINT32 i=0; i<num_sets; i++)
+        {
+            // std::cout<<"inside for-loop in the VWAY constructor, iteration = "<<i<<"\n";
+            tag_stores[i] = new CACHE_METADATA[(set_data[i].TDR)*associativity];  // optimization
+
+            // for(UINT32 j=0; j<(set_data[i].TDR)*associativity; j++)
+            // {
+            //     tag_stores[i][j] = CACHE_METADATA(0);
+            // }
+            // std::cout<<"iteration complete \n\n";
+        }
+
+        // std::cout<<"Midway in the VWAY constructor\n";
+
+        STORE_ALLOCATION = CACHE_ALLOC::STORE_ALLOCATE;
+
+       
+        // ---------------- set the counter value for LRU ----------------
+         for(UINT32 index = 0; index < num_sets; index++ )
+         {
+            // std::cout<<"Inside 2nd for loop "<<num_sets<<"\n";
+             set_data[index].SetAssociativity(associativity);
+             for(int index2 = set_data[index].max_associativity-1; index2 >= 0; index2--) ///Check loop
+             {
+                // std::cout<<"Inside 3rd for loop\n";
+                 tag_stores[index][index2].set_count(index2);
+             }
+         }
+         // std::cout<<"Exiting the VWAY constructor\n";
+     }
+ 
+     // modifiers
+     /// Cache access from addr to addr+size-1
+     bool Access(ADDRINT addr, UINT32 size, ACCESS_TYPE accessType);
+     /// Cache access at addr that does not span cache lines
+     bool AccessSingleLine(ADDRINT addr, ACCESS_TYPE accessType);
+    //  void Flush();
+    //  void ResetStats();
+ 
+     UINT32 Find(CACHE_TAG tag, UINT32 set_index)
+     {
+        // if(set_index == 25)
+        //     std::cout<<"Find called in Set Index is 25 & set associativity = "<<set_data[set_index].current_associativity<<"\n";
+         bool result = true;
+         //std::cout<<"Inside the find function\n"<<"current_associativity = "<< current_associativity<<"\n";
+ 
+         if(set_data[set_index].current_associativity>0)
+         {
+            for (UINT32 index = 0;  index <= (set_data[set_index].max_associativity-1); index++)
+            {
+                // this is an ugly micro-optimization, but it does cause a
+                // tighter assembly loop for ARM that way ...
+                // std::cout<<"Inside for loop before if "<<index<<" for set-index "<<set_index<<"\n";
+                // if(index >= 0)
+                // {
+    
+                    if (tag_stores[set_index][index].isValid() && tag_stores[set_index][index].get_tag() == tag) 
+                    {
+                        // std::cout<<"hit on index "<<index<<"\n";
+                        // if(set_index == 25)
+                        // {
+                        //     std::cout<<"hit on index "<<index<<"\n";
+                        // }
+                        // decrement the value of the other counters 
+                        // if(_counters[index] != MAX_ASSOCIATIVITY-1)
+                        // {
+                            for(UINT32 index2 = 0; index2 <= (set_data[set_index].max_associativity-1); index2++)
+                            {
+                                if(index2 != index && tag_stores[set_index][index2].isValid() && tag_stores[set_index][index2].get_count() > tag_stores[set_index][index].get_count())
+                                {
+                                    tag_stores[set_index][index2].decrement_count();
+                                    // std::cout << "Hello 2";
+                                }
+                            }
+                        // }
+    
+                        // maximize the counter of found index
+                        tag_stores[set_index][index].set_count(set_data[set_index].current_associativity-1);
+                        data_array._data_store[tag_stores[set_index][index].get_FPTR()].increment_reuse_counter();
+                        
+                        goto end;
+                    }
+                // }
+            }
+         }
+         // std::cout<<"After the for loop\n";
+         result = false;
+ 
+     end:
+         return result;
+     }
+ 
+     CACHE_TAG Replace(CACHE_TAG tag, UINT32 set_index, UINT32 newage)
+     {
+        // if(set_index == 25)
+        //     std::cout<<"Replace called in Set Index is 25 & set associativity = "<<set_data
+     
+        // if(set_index == 25)
+        //     std::cout<<"Replace called in Set Index is 25 & set associativity = "<<set_data[set_index].current_associativity<<"\n";
+ 
+         // ################################ case-1: At least 1 invalid way in the target set ################################
+         if(set_data[set_index].current_associativity < set_data[set_index].max_associativity)
+         {
+             //  ------------------------ Determine tag victim ------------------------
+             // current_associativity gives the victim index 
+             for (UINT32 index = 0;  index <= (set_data[set_index].max_associativity-1); index++)
+             {
+                if(!tag_stores[set_index][index].isValid())
+                {
+                    victim_index = index;
+                    // if(set_index == 25)
+                    //     std::cout<<"victim index is "<<victim_index<<"\n";
+                    break;
+                }
+             }
+
+
+             // victim_index = set_data[set_index].current_associativity;
+
+             // update the corresponding tag store 
+             tag_stores[set_index][victim_index].set_tag(tag);
+             tag_stores[set_index][victim_index].toggleValid();
+             tag_stores[set_index][victim_index].set_count(set_data[set_index].current_associativity);
+             set_data[set_index].current_associativity++;                //demand based growth in associativity
+
+            //  if(set_index == 25)
+            // {
+            //     // std::cout<<"Memory Access at address: "<<addr<<", tag:"<<tag<<", setIndex:"<<setIndex<<", current_set_associativity:"<<set_data[setIndex].current_associativity<<"\n";
+            //     debug_replacement_policy(set_index);
+            // }
+             
+             // ------------------------ Determine Data Victim ------------------------
+             while(data_array._data_store[data_array.PTR].get_reuse_counter() != 0)
+             {
+                data_array._data_store[data_array.PTR].decrement_reuse_counter();
+                data_array.PTR++;
+
+                // reset PTR on reaching the end of the data store 
+                if(data_array.PTR == (data_array.data_store_size)) //give a variable name
+                    data_array.PTR = 0;
+             }// PTR points to the data victim
+
+             // ------------------------ Map new tag store to its data block ------------------------
+             tag_stores[set_index][victim_index].set_FPTR(data_array.PTR); 
+
+             // ------------------------ Remap data block to new cache block ------------------------ 
+             UINT64 data_victim_rptr = data_array._data_store[data_array.PTR].get_RPTR();
+             UINT64 new_rptr = set_index * set_data[set_index].max_associativity + victim_index;
+             data_array._data_store[data_array.PTR].set_RPTR(new_rptr);
+ 
+             data_array.PTR++; //Give this new block some time to be resused.
+             if(data_array.PTR == (data_array.data_store_size)) //give a variable name
+                data_array.PTR = 0;
+
+            // if(set_index == 25)
+            // {
+            //         // std::cout<<"Memory Access at address: "<<addr<<", tag:"<<tag<<", setIndex:"<<setIndex<<", current_set_associativity:"<<set_data[setIndex].current_associativity<<"\n";
+            //     debug_replacement_policy(set_index);
+            // }
+             
+             // ------------------------ Invalidate tag victim ------------------------
+             if(data_victim_rptr != UINT64(-1))
+             {
+                // if(set_index == 25)
+                //     std::cout<<"data victim RPTR = "<<data_victim_rptr<<"\n";
+
+                 UINT32 victim_set_index = data_victim_rptr/set_data[set_index].max_associativity;
+                 UINT32 victim_way = data_victim_rptr%set_data[set_index].max_associativity;
+
+                 tag_stores[victim_set_index][victim_way].toggleValid();
+                 tag_stores[victim_set_index][victim_way].set_tag(CACHE_TAG(0));
+
+                
+                 if(set_data[victim_set_index].current_associativity > 0)
+                {
+                    // update the counters in the victim set
+                    for(UINT32 index=0; index < set_data[victim_set_index].max_associativity; index++)
+                    {
+                        // update only if counter value is greater than the victim & the way is valid
+                        if(tag_stores[victim_set_index][index].isValid() && tag_stores[victim_set_index][victim_way].get_count() < tag_stores[victim_set_index][index].get_count())
+                        {
+                            tag_stores[victim_set_index][index].decrement_count();
+                        }
+                    }
+                    tag_stores[victim_set_index][victim_way].set_count(set_data[victim_set_index].current_associativity-1);
+
+                    set_data[victim_set_index].current_associativity--;
+                    // if(victim_set_index == 25)
+                    // {
+                    //     std::cout<<"Set Index = "<<victim_set_index<<", victim_way = "<<victim_way<<", current_associativity = "<<set_data[victim_set_index].current_associativity<<"\n";// <<std::flush;
+                    //     debug_replacement_policy(victim_set_index);
+                    // }
+                    
+                }
+             }
+            //  if(set_index == 25)
+            // {
+            //         // std::cout<<"Memory Access at address: "<<addr<<", tag:"<<tag<<", setIndex:"<<setIndex<<", current_set_associativity:"<<set_data[setIndex].current_associativity<<"\n";
+            //     debug_replacement_policy(set_index);
+            // }
+            // No possible tag value to be replaced
+            return CACHE_TAG(-1);
+         }
+ 
+         // ################################ case-2: All the ways are valid in the target set ################################
+         else
+         {
+
+            // if(set_index == 25)
+            // {
+            //     std::cout<<"Else case of replace\n";
+            // }
+            CACHE_TAG victim_tag;
+             for(UINT32 index = (set_data[set_index].max_associativity-1); index >= 0 && index <= (set_data[set_index].max_associativity-1); index--)
+             {
+                 if(tag_stores[set_index][index].get_count() ==  0)
+                 {
+                    victim_index = index;
+                    victim_tag = tag_stores[set_index][victim_index].get_tag();
+                    break;
+                 }
+             }
+ 
+             // decrement the value of the other counters 
+             if(newage != 0)
+             {
+                for(UINT32 index = set_data[set_index].max_associativity-1; index >= 0 && index <= (set_data[set_index].max_associativity-1); index--)
+                {
+                    if(index != victim_index && tag_stores[set_index][index].get_count() > 0)
+                    {
+                       tag_stores[set_index][index].decrement_count();
+                    }
+                }
+                tag_stores[set_index][victim_index].set_count(set_data[set_index].max_associativity-1);
+             }
+            
+ 
+             tag_stores[set_index][victim_index].set_tag(tag);
+             
+            //  tag_stores[set_index][victim_index].toggleValid();
+             data_array._data_store[tag_stores[set_index][victim_index].get_FPTR()].set_reuse_counter(0);
+             data_array.PTR = tag_stores[set_index][victim_index].get_FPTR()+1;
+             if(data_array.PTR == (data_array.data_store_size)) //give a variable name
+                data_array.PTR = 0;
+
+
+            return victim_tag;
+         }
+     }
+
+
+     VOID debug_replacement_policy(UINT32 set_index)
+     {
+        for(UINT32 index = 0;  index <= (set_data[set_index].max_associativity-1); index++)
+        {
+            std::cout<<"Way-"<<index<<": tag="<<tag_stores[set_index][index].get_tag()<<", counter="<<tag_stores[set_index][index].get_count()<<", validity = "<<tag_stores[set_index][index].isValid()<<" :: ";
+        }
+        std::cout<<"\n\n\n";
+     }
+ };
+
+
+ bool VWAY_EAF_CACHE::Access(ADDRINT addr, UINT32 size, ACCESS_TYPE accessType)
+ {
+      const ADDRINT highAddr = addr + size;
+      bool allHit            = true;
+  
+      const ADDRINT lineSize    = LineSize();
+      const ADDRINT notLineMask = ~(lineSize - 1);
+      const UINT32 maxAge = Associativity() - 1;
+      do
+      {
+          CACHE_TAG tag;
+          UINT32 setIndex;
+  
+          SplitAddress(addr, tag, setIndex);
+  
+          //SET& set = _sets[setIndex];
+         //  if(setIndex == 25)
+         //  {
+         //     std::cout<<"Memory Access at address: "<<addr<<", tag:"<<tag<<", setIndex:"<<setIndex<<", current_set_associativity:"<<set_data[setIndex].current_associativity<<"\n";
+         //     debug_replacement_policy(setIndex);
+         //  }
+  
+          bool localHit = Find(tag, setIndex);
+          allHit &= localHit;
+ 
+         //  if(setIndex == 25)
+         //     std::cout<<"localHit = "<<localHit<<"\n";
+  
+          // on miss, loads always allocate, stores optionally
+          if ((!localHit) && (accessType == ACCESS_TYPE_LOAD || STORE_ALLOCATION == CACHE_ALLOC::STORE_ALLOCATE))
+          {
+             // if(setIndex == 25)
+             //     std::cout<<"Miss!!\n";
+             /* ---------- 1.  Look up the EAF before replacing the tag to check if it is HIGH-REUSE or LOW-REUSE ---------- */
+             bool highReuse = ul3_eaf.test(tag);
+ 
+            //  /* ---------- 2.  pick insertion age ---------- */
+            UINT32 newAge;
+             if (highReuse)
+                 newAge = maxAge; // MRU
+             else
+                 newAge = ((rand() & 0x3F) == 0) ? maxAge // 1/64 MRU
+                                                 : 0;     // usually LRU
+
+
+            /* ---------- 3.  insert & get evicted tag ---- */
+            CACHE_TAG victim = Replace(tag, setIndex, newAge);
+
+            
+
+            /* ---------- 4.  update EAF ------------------ */
+            if(victim != ADDRINT(-1))
+                ul3_eaf.insert(victim);
+
+
+            //   Replace(tag, setIndex);
+          }
+ 
+          // debug 
+         //  if(setIndex == 25)
+         //  {
+         //     std::cout<<"Memory Access at address: "<<addr<<", tag:"<<tag<<", setIndex:"<<setIndex<<", current_set_associativity:"<<set_data[setIndex].current_associativity<<"\n";
+         //     debug_replacement_policy(setIndex);
+         //  }
+ 
+  
+          addr = (addr & notLineMask) + lineSize; // start of next cache line
+      }
+      while (addr < highAddr);
+  
+      _access[accessType][allHit]++;
+  
+      return allHit;
+  }
+  
+  /*!
+   *  @return true if accessed cache line hits
+   */
+ //  template< UINT32 MAX_ASSOCIATIVITY, UINT32 MAX_SETS, UINT32 STORE_ALLOCATION>
+ //  bool VWAY_CACHE< MAX_ASSOCIATIVITY, MAX_SETS, STORE_ALLOCATION >::AccessSingleLine(ADDRINT addr, ACCESS_TYPE accessType)
+  
+ bool VWAY_EAF_CACHE::AccessSingleLine(ADDRINT addr, ACCESS_TYPE accessType)
+ {
+      CACHE_TAG tag;
+      UINT32 setIndex;
+  
+      SplitAddress(addr, tag, setIndex);
+  
+      //SET& set = _sets[setIndex];
+  
+      bool hit = Find(tag, setIndex);
+    //   UINT32 newAge;
+     //  if(setIndex == 25)
+     //         std::cout<<"hit = "<<hit<<"\n";
+  
+      // on miss, loads always allocate, stores optionally
+      if ((!hit) && (accessType == ACCESS_TYPE_LOAD || STORE_ALLOCATION == CACHE_ALLOC::STORE_ALLOCATE))
+      {
+         // if(setIndex == 25)
+         //     std::cout<<"Miss!!\n";
+          Replace(tag, setIndex, 1);
+          
+      }
+ 
+      // debug 
+     //  if(setIndex == 25)
+     //  {
+     //     std::cout<<"Memory Access at address: "<<addr<<", tag:"<<tag<<", setIndex:"<<setIndex<<", current_set_associativity:"<<set_data[setIndex].current_associativity<<"\n";
+     //     debug_replacement_policy(setIndex);
+     //  }
+ 
+  
+      _access[accessType][hit]++;
+  
+      return hit;
+  }
+
+
  
  // define shortcuts
  #define CACHE_DIRECT_MAPPED(MAX_SETS, ALLOCATION) CACHE<CACHE_SET::DIRECT_MAPPED, MAX_SETS, ALLOCATION>

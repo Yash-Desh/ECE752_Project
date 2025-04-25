@@ -1,0 +1,54 @@
+L1 Instruction Cache:
+   Load Hits:          287732
+   Load Misses:          1796
+   Load Accesses:      289528
+   Load Miss Rate:      0.62%
+
+  Store Hits:               0
+  Store Misses:             0
+  Store Accesses:           0
+  Store Miss Rate:       nan%
+
+  Total Hits:          287732
+  Total Misses:          1796
+  Total Accesses:      289528
+  Total Miss Rate:      0.62%
+  Flushes:                  0
+  Stat Resets:              0
+
+L1 Data Cache:
+   Load Hits:           63497
+   Load Misses:          3788
+   Load Accesses:       67285
+   Load Miss Rate:      5.63%
+
+  Store Hits:           30124
+  Store Misses:          5819
+  Store Accesses:       35943
+  Store Miss Rate:     16.19%
+
+  Total Hits:           93621
+  Total Misses:          9607
+  Total Accesses:      103228
+  Total Miss Rate:      9.31%
+  Flushes:                  0
+  Stat Resets:              0
+
+L2 Unified Cache:
+   Load Hits:            2727
+   Load Misses:          2857
+   Load Accesses:        5584
+   Load Miss Rate:     51.16%
+
+  Store Hits:             581
+  Store Misses:          5238
+  Store Accesses:        5819
+  Store Miss Rate:     90.02%
+
+  Total Hits:            3308
+  Total Misses:          8095
+  Total Accesses:       11403
+  Total Miss Rate:     70.99%
+  Flushes:                  0
+  Stat Resets:              0
+
