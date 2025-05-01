@@ -11,7 +11,27 @@ extern EAF ul3_eaf;
 typedef UINT64 CACHE_STATS; // type of cache hit/miss counters
 
 #include "pin_cache.H"
- 
+
+/* ------------------------------------------------------ */
+/* 1.  NEW GLOBAL STATISTICS                              */
+/* ------------------------------------------------------ */
+static UINT64 totalAccesses   = 0;        // ADDED – every L1/L2/L3 access
+static UINT64 eafAccesses     = 0;        // ADDED – calls that query the EAF
+static UINT64 instCount       = 0;        // ADDED – dynamic instructions retired
+static UINT64 cycleCount      = 0;        // ADDED – very simple “cycle” model
+
+/* ------------------------------------------------------ */
+/* 2.  VERY ROUGH LATENCY MODEL (tweak as you like)       */
+/* ------------------------------------------------------ */
+const UINT32 LAT_IL1 = 2;     // 1 cycle hit
+const UINT32 LAT_DL1 = 3;
+const UINT32 LAT_EAF = 2; //2 cycles (1 cycle for parallel hash & bit read + 1 cycle to merge with L3 insertion logic)
+const UINT32 LAT_UL2_HIT = 10; // ± real µ-arch
+const UINT32 LAT_UL2_MISS = 40;  // miss ⇒ go to DRAM (or UL3 in your flow)
+/* ------------------------------------------------------ */
+
+
+
 namespace IL1
 {
 // 1st level instruction cache: 32 kB, 32 B lines, 32-way associative
@@ -100,7 +120,7 @@ static VOID Fini(int code, VOID* v)
    // Generate timestamped filename with BASELRU prefix
    time_t now = time(nullptr);
    char filename[80];  // Increased size to accommodate the prefix
-   strftime(filename, sizeof(filename), "VWAY_EAF_L2-%Y-%m-%d_%H-%M-%S.out", localtime(&now));
+   strftime(filename, sizeof(filename), "eaf_lru_CPI-%Y-%m-%d_%H-%M-%S.out", localtime(&now));
 
    // Open file and dump stats
    std::ofstream out(filename);
@@ -109,9 +129,26 @@ static VOID Fini(int code, VOID* v)
    out << dl1;
    out << ul2;
    //out << ul3;
+
+    // EXTRA:
+    out << "\n################  EXTRA STATS  ################\n";
+    out << "Total cache-related accesses      : " << totalAccesses << '\n';   // ADDED
+    out << "EAF filter accesses         : " << eafAccesses   << '\n';   // ADDED
+    out << "Dynamic instructions retired     : " << instCount      << '\n';   // ADDED
+    out << "Approximate cycles               : " << cycleCount     << '\n';   // ADDED
+    if (instCount)
+        out << "Approximate CPI                 : "
+            << std::fixed << std::setprecision(2)
+            << static_cast<double>(cycleCount) / instCount << '\n';           // ADDED
+
 }
 
    //  out << ul3;
+
+
+/* ------------------------------------------------------ */
+/* 3.  BUMP TOTAL-ACCESS COUNTER EARLIEST IN THE STACK    */
+/* ------------------------------------------------------ */
 
 static VOID Ul2Access(ADDRINT addr, UINT32 size, CACHE_BASE::ACCESS_TYPE accessType)
 {
@@ -119,13 +156,37 @@ static VOID Ul2Access(ADDRINT addr, UINT32 size, CACHE_BASE::ACCESS_TYPE accessT
    //  const BOOL ul2Hit = ul2.Access(addr, size, accessType);
    //std::cout<<"Ul2Access Called on address = "<<addr<<"\n"<<std::flush;
 //    ul2.Access(addr, size, accessType);
-   ul2.UL3AccessEAF(addr, size, accessType);
+//    ul2.UL3AccessEAF(addr, size, accessType);
    //  // third level unified cache
    //  if (!ul2Hit) ul3.Access(addr, size, accessType);
+
+
+//NEW
+totalAccesses++;                          // ADDED
+eafAccesses++;                            // ADDED – the call always consults EAF
+
+const BOOL hit = ul2.UL3AccessEAF(addr, size, accessType);
+
+/* crude timing model */
+cycleCount += hit ? LAT_UL2_HIT : LAT_UL2_MISS;      // ADDED
+
+/* 2) pay the EAF probe latency **only** on a miss */
+if (!hit)
+cycleCount += LAT_EAF;  // NEW
+
 }
+
+
+/* ------------------------------------------------------ */
+/* 4.  FRONT-END & BACK-END INSTRUMENTATION               */
+/* ------------------------------------------------------ */
 
 static VOID InsRef(ADDRINT addr)
 {
+
+    instCount++;                              // ADDED
+    cycleCount += LAT_IL1;                    // ADDED   (I-cache assumed hit)
+
     const UINT32 size                        = 1; // assuming access does not cross cache lines
     const CACHE_BASE::ACCESS_TYPE accessType = CACHE_BASE::ACCESS_TYPE_LOAD;
 
@@ -157,7 +218,12 @@ static VOID MemRefSingle(ADDRINT addr, UINT32 size, CACHE_BASE::ACCESS_TYPE acce
    //  dtlb.AccessSingleLine(addr, CACHE_BASE::ACCESS_TYPE_LOAD);
 
     // first level D-cache
+
+    totalAccesses++;                          // ADDED
+
     const BOOL dl1Hit = dl1.AccessSingleLine(addr, accessType);
+
+    cycleCount += dl1Hit ? LAT_DL1 : 0;       // ADDED  (latency if hit; miss handled in Ul2Access)
 
     // second level unified Cache
     if (!dl1Hit) Ul2Access(addr, size, accessType);

@@ -47,7 +47,7 @@ static DL1::CACHE dl1("L1 Data Cache", DL1::cacheSize, DL1::lineSize, DL1::assoc
 namespace UL2
 {
 // 2nd level unified cache: 2 MB, 64 B lines, direct mapped
-const UINT32 cacheSize                         = 256* KILO;
+const UINT32 cacheSize                         = 512* KILO;
 const UINT32 lineSize                          = 64;
 const UINT32 associativity                     = 8;
 const CACHE_ALLOC::STORE_ALLOCATION allocation = CACHE_ALLOC::STORE_ALLOCATE;
@@ -100,7 +100,7 @@ static VOID Fini(int code, VOID* v)
    // Generate timestamped filename with BASELRU prefix
    time_t now = time(nullptr);
    char filename[80];  // Increased size to accommodate the prefix
-   strftime(filename, sizeof(filename), "VWAY_EAF_L2-%Y-%m-%d_%H-%M-%S.out", localtime(&now));
+   strftime(filename, sizeof(filename), "VWAY_EAF_L2_512-%Y-%m-%d_%H-%M-%S.out", localtime(&now));
 
    // Open file and dump stats
    std::ofstream out(filename);

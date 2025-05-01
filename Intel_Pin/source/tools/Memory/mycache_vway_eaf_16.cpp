@@ -63,7 +63,7 @@ typedef CACHE_LEAST_RECENTLY_USED(max_sets, associativity, allocation) CACHE;
 // VWAY_EAF_CACHE ul2("L2 Unified Cache", UL2::cacheSize, UL2::lineSize, UL2::associativity);
 static UL2::CACHE ul2("L2 Unified Cache", UL2::cacheSize, UL2::lineSize, UL2::associativity);
 
-EAF ul3_eaf( UL2::cacheSize / UL2::lineSize , /*alpha=*/8 );  
+EAF ul3_eaf( UL2::cacheSize / UL2::lineSize , /*alpha=*/16 );  
 
 //  // Define Data-Store
 DATA data_array (UL2::cacheSize, UL2::lineSize);
@@ -100,7 +100,7 @@ static VOID Fini(int code, VOID* v)
    // Generate timestamped filename with BASELRU prefix
    time_t now = time(nullptr);
    char filename[80];  // Increased size to accommodate the prefix
-   strftime(filename, sizeof(filename), "VWAY_EAF_L2-%Y-%m-%d_%H-%M-%S.out", localtime(&now));
+   strftime(filename, sizeof(filename), "VWAY_EAF_L2_16-%Y-%m-%d_%H-%M-%S.out", localtime(&now));
 
    // Open file and dump stats
    std::ofstream out(filename);

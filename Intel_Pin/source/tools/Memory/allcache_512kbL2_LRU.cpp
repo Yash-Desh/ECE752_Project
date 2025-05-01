@@ -1,29 +1,64 @@
+/*
+ * Copyright (C) 2004-2021 Intel Corporation.
+ * SPDX-License-Identifier: MIT
+ */
+
+/*! @file
+ *  This file contains an ISA-portable PIN tool for functional simulation of
+ *  instruction+data TLB+cache hierarchies
+ */
+
 #include <iostream>
 #include <fstream>
-#include <unordered_map>
 #include "pin.H"
-#include <fstream>
-#include <ctime>
 #include "eaf.H"
-extern EAF ul3_eaf; 
+extern EAF ul3_eaf;  
 
-
-typedef UINT64 CACHE_STATS; // type of cache hit/miss counters
+typedef UINT32 CACHE_STATS; // type of cache hit/miss counters
 
 #include "pin_cache.H"
- 
+
+// namespace ITLB
+// {
+// // instruction TLB: 4 kB pages, 32 entries, fully associative
+// const UINT32 lineSize                          = 4 * KILO;
+// const UINT32 cacheSize                         = 32 * lineSize;
+// const UINT32 associativity                     = 32;
+// const CACHE_ALLOC::STORE_ALLOCATION allocation = CACHE_ALLOC::STORE_ALLOCATE;
+
+// const UINT32 max_sets          = cacheSize / (lineSize * associativity);
+// const UINT32 max_associativity = associativity;
+
+// typedef CACHE_ROUND_ROBIN(max_sets, max_associativity, allocation) CACHE;
+// } // namespace ITLB
+// static ITLB::CACHE itlb("ITLB", ITLB::cacheSize, ITLB::lineSize, ITLB::associativity);
+
+// namespace DTLB
+// {
+// // data TLB: 4 kB pages, 32 entries, fully associative
+// const UINT32 lineSize                          = 4 * KILO;
+// const UINT32 cacheSize                         = 32 * lineSize;
+// const UINT32 associativity                     = 32;
+// const CACHE_ALLOC::STORE_ALLOCATION allocation = CACHE_ALLOC::STORE_ALLOCATE;
+
+// const UINT32 max_sets          = cacheSize / (lineSize * associativity);
+// const UINT32 max_associativity = associativity;
+
+// typedef CACHE_ROUND_ROBIN(max_sets, max_associativity, allocation) CACHE;
+// } // namespace DTLB
+// static DTLB::CACHE dtlb("DTLB", DTLB::cacheSize, DTLB::lineSize, DTLB::associativity);
+
 namespace IL1
 {
 // 1st level instruction cache: 32 kB, 32 B lines, 32-way associative
 const UINT32 cacheSize                         = 16 * KILO;
 const UINT32 lineSize                          = 64;
 const UINT32 associativity                     = 2;
-const CACHE_ALLOC::STORE_ALLOCATION allocation = CACHE_ALLOC::STORE_ALLOCATE;
+const CACHE_ALLOC::STORE_ALLOCATION allocation = CACHE_ALLOC::STORE_NO_ALLOCATE;
 
 const UINT32 max_sets          = cacheSize / (lineSize * associativity);
 const UINT32 max_associativity = associativity;
 
-//  typedef CACHE_ROUND_ROBIN(max_sets, max_associativity, allocation) CACHE;
 typedef CACHE_LEAST_RECENTLY_USED(max_sets, associativity, allocation) CACHE;
 } // namespace IL1
 static IL1::CACHE il1("L1 Instruction Cache", IL1::cacheSize, IL1::lineSize, IL1::associativity);
@@ -34,12 +69,11 @@ namespace DL1
 const UINT32 cacheSize                         = 16 * KILO;
 const UINT32 lineSize                          = 64;
 const UINT32 associativity                     = 2;
-const CACHE_ALLOC::STORE_ALLOCATION allocation = CACHE_ALLOC::STORE_ALLOCATE;
+const CACHE_ALLOC::STORE_ALLOCATION allocation = CACHE_ALLOC::STORE_NO_ALLOCATE;
 
 const UINT32 max_sets          = cacheSize / (lineSize * associativity);
 const UINT32 max_associativity = associativity;
 
-//  typedef CACHE_ROUND_ROBIN(max_sets, max_associativity, allocation) CACHE;
 typedef CACHE_LEAST_RECENTLY_USED(max_sets, associativity, allocation) CACHE;
 } // namespace DL1
 static DL1::CACHE dl1("L1 Data Cache", DL1::cacheSize, DL1::lineSize, DL1::associativity);
@@ -47,81 +81,58 @@ static DL1::CACHE dl1("L1 Data Cache", DL1::cacheSize, DL1::lineSize, DL1::assoc
 namespace UL2
 {
 // 2nd level unified cache: 2 MB, 64 B lines, direct mapped
-const UINT32 cacheSize                         = 256* KILO;
+const UINT32 cacheSize                         = 512 * KILO;
 const UINT32 lineSize                          = 64;
 const UINT32 associativity                     = 8;
 const CACHE_ALLOC::STORE_ALLOCATION allocation = CACHE_ALLOC::STORE_ALLOCATE;
 
 const UINT32 max_sets = cacheSize / (lineSize * associativity);
 
-// typedef CACHE_DIRECT_MAPPED(max_sets, allocation) CACHE;
-// typedef CACHE_ROUND_ROBIN(max_sets, associativity, allocation) CACHE;
 typedef CACHE_LEAST_RECENTLY_USED(max_sets, associativity, allocation) CACHE;
-// typedef CACHE_VARIABLE_WAY(max_sets, associativity, allocation) CACHE;
-
 } // namespace UL2
-// VWAY_EAF_CACHE ul2("L2 Unified Cache", UL2::cacheSize, UL2::lineSize, UL2::associativity);
 static UL2::CACHE ul2("L2 Unified Cache", UL2::cacheSize, UL2::lineSize, UL2::associativity);
-
 EAF ul3_eaf( UL2::cacheSize / UL2::lineSize , /*alpha=*/8 );  
-
 //  // Define Data-Store
 DATA data_array (UL2::cacheSize, UL2::lineSize);
 
+// namespace UL3
+// {
+// // 3rd level unified cache: 16 MB, 64 B lines, direct mapped
+// const UINT32 cacheSize                         = 16 * MEGA;
+// const UINT32 lineSize                          = 64;
+// const UINT32 associativity                     = 1;
+// const CACHE_ALLOC::STORE_ALLOCATION allocation = CACHE_ALLOC::STORE_ALLOCATE;
+
+// const UINT32 max_sets = cacheSize / (lineSize * associativity);
+
+// typedef CACHE_DIRECT_MAPPED(max_sets, allocation) CACHE;
+// } // namespace UL3
+// static UL3::CACHE ul3("L3 Unified Cache", UL3::cacheSize, UL3::lineSize, UL3::associativity);
+
 static VOID Fini(int code, VOID* v)
 {
-    /*std::ofstream out ("mycache.out");
+    std::ofstream out ("allcache_512kbL2.out");
     out << "PIN:MEMLATENCIES 1.0. 0x0\n";
 
-    out << "#\n# L1 Instruction Cache stats\n";
-    out << "# IL1 Cache Size           : "<<IL1::cacheSize<<"\n";
-    out << "# IL1 Line Size            : "<<IL1::lineSize<<"\n";
-    out << "# IL1 Associativity        : "<<IL1::associativity<<"\n";
-    out << "# IL1 Replacement Policy   : LRU\n";
-
-    out << "#\n# L1 Data Cache stats\n";
-    out << "# DL1 Cache Size           : "<<DL1::cacheSize<<"\n";
-    out << "# DL1 Line Size            : "<<DL1::lineSize<<"\n";
-    out << "# DL1 Associativity        : "<<DL1::associativity<<"\n";
-    out << "# DL1 Replacement Policy   : LRU\n";
-
-    out << "#\n# L2 Unified Cache stats\n";
-    out << "# UL2 Cache Size           : "<<UL2::cacheSize<<"\n";
-    out << "# UL2 Line Size            : "<<UL2::lineSize<<"\n";
-    out << "# UL2 Associativity        : "<<UL2::associativity<<"\n";
-    out << "# UL2 Replacement Policy   : LRU\n";
-
-    out <<"\n####################################################################\n";
+    out << "#\n"
+           "# Allache stats\n"
+           "#\n";
+    // out << itlb;
+    // out << dtlb;
     out << il1;
     out << dl1;
-    out << ul2;*/
-    //static VOID Fini(int code, VOID* v)
-
-   // Generate timestamped filename with BASELRU prefix
-   time_t now = time(nullptr);
-   char filename[80];  // Increased size to accommodate the prefix
-   strftime(filename, sizeof(filename), "VWAY_EAF_L2-%Y-%m-%d_%H-%M-%S.out", localtime(&now));
-
-   // Open file and dump stats
-   std::ofstream out(filename);
-   if (!out) return;
-   out << il1;
-   out << dl1;
-   out << ul2;
-   //out << ul3;
+    out << ul2;
+    // out << ul3;
 }
-
-   //  out << ul3;
 
 static VOID Ul2Access(ADDRINT addr, UINT32 size, CACHE_BASE::ACCESS_TYPE accessType)
 {
-   // second level unified cache
-   //  const BOOL ul2Hit = ul2.Access(addr, size, accessType);
-   //std::cout<<"Ul2Access Called on address = "<<addr<<"\n"<<std::flush;
-//    ul2.Access(addr, size, accessType);
-   ul2.UL3AccessEAF(addr, size, accessType);
-   //  // third level unified cache
-   //  if (!ul2Hit) ul3.Access(addr, size, accessType);
+    // second level unified cache
+//     const BOOL ul2Hit = ul2.Access(addr, size, accessType);
+ul2.Access(addr, size, accessType);
+
+//     // third level unified cache
+//     // if (!ul2Hit) ul3.Access(addr, size, accessType);
 }
 
 static VOID InsRef(ADDRINT addr)
@@ -129,32 +140,34 @@ static VOID InsRef(ADDRINT addr)
     const UINT32 size                        = 1; // assuming access does not cross cache lines
     const CACHE_BASE::ACCESS_TYPE accessType = CACHE_BASE::ACCESS_TYPE_LOAD;
 
-   //  // ITLB
-   //  itlb.AccessSingleLine(addr, accessType);
+    // ITLB
+    // itlb.AccessSingleLine(addr, accessType);
 
     // first level I-cache
     const BOOL il1Hit = il1.AccessSingleLine(addr, accessType);
 
     // second level unified Cache
     if (!il1Hit) Ul2Access(addr, size, accessType);
+    // if(!il1hit) ul2.Access(addr, size, accessType);
 }
 
 static VOID MemRefMulti(ADDRINT addr, UINT32 size, CACHE_BASE::ACCESS_TYPE accessType)
 {
-   //  // DTLB
-   //  dtlb.AccessSingleLine(addr, CACHE_BASE::ACCESS_TYPE_LOAD);
+    // DTLB
+    // dtlb.AccessSingleLine(addr, CACHE_BASE::ACCESS_TYPE_LOAD);
 
     // first level D-cache
     const BOOL dl1Hit = dl1.Access(addr, size, accessType);
 
     // second level unified Cache
     if (!dl1Hit) Ul2Access(addr, size, accessType);
+    // if (!dl1Hit) ul2.Access(addr, size, accessType);
 }
 
 static VOID MemRefSingle(ADDRINT addr, UINT32 size, CACHE_BASE::ACCESS_TYPE accessType)
 {
-   //  // DTLB
-   //  dtlb.AccessSingleLine(addr, CACHE_BASE::ACCESS_TYPE_LOAD);
+    // DTLB
+    // dtlb.AccessSingleLine(addr, CACHE_BASE::ACCESS_TYPE_LOAD);
 
     // first level D-cache
     const BOOL dl1Hit = dl1.AccessSingleLine(addr, accessType);
